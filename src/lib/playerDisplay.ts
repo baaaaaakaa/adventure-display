@@ -1,0 +1,550 @@
+import type {
+  Adventure,
+  AdventureScene,
+  MapLayerInstance,
+  MapViewport,
+  ProjectState,
+  SceneRuntimeState,
+  ServiceMarker,
+  SessionState,
+  TokenInstance,
+} from '../types/adventure'
+
+export const playerDisplayChannelName = 'adventure-display-player'
+const projectStateStorageKey = 'adventure-display:project-state'
+
+function looksLikeBrokenEncoding(value: string) {
+  return /[ÐÑÕÏÃ]|ñë|Р.|С.|[\u0080-\u009f]/.test(value)
+}
+
+function encodeWindows1251Bytes(value: string) {
+  const bytes: number[] = []
+
+  for (const char of value) {
+    const code = char.charCodeAt(0)
+
+    if (code <= 0x7f) {
+      bytes.push(code)
+      continue
+    }
+
+    if (code >= 0x0410 && code <= 0x044f) {
+      bytes.push(code - 0x0350)
+      continue
+    }
+
+    if (code === 0x0401) {
+      bytes.push(0xa8)
+      continue
+    }
+
+    if (code === 0x0451) {
+      bytes.push(0xb8)
+      continue
+    }
+
+    if (code === 0x2014) {
+      bytes.push(0x97)
+      continue
+    }
+
+    if (code === 0x2116) {
+      bytes.push(0xb9)
+      continue
+    }
+
+    return null
+  }
+
+  return Uint8Array.from(bytes)
+}
+
+function tryDecodeByteString(value: string, encoding: string) {
+  try {
+    const bytes = Uint8Array.from(value, (char) => char.charCodeAt(0) & 0xff)
+    return new TextDecoder(encoding, { fatal: true }).decode(bytes)
+  } catch {
+    return value
+  }
+}
+
+function tryRepairClassicMojibake(value: string) {
+  const bytes = encodeWindows1251Bytes(value)
+
+  if (!bytes) {
+    return value
+  }
+
+  try {
+    return new TextDecoder('utf-8', { fatal: true }).decode(bytes)
+  } catch {
+    return value
+  }
+}
+
+function scoreDecodedCandidate(value: string) {
+  const cyrillicChars = (value.match(/[\u0400-\u04FF]/g) ?? []).length
+  const latinChars = (value.match(/[A-Za-z]/g) ?? []).length
+  const digitsAndSpaces = (value.match(/[\d\s.,:;!?()"'`-]/g) ?? []).length
+  const controlChars = [...value].filter((char) => {
+    const code = char.charCodeAt(0)
+    return (code >= 0x00 && code <= 0x1f) || (code >= 0x7f && code <= 0x9f)
+  }).length
+  const mojibakeMarkers =
+    (value.match(/[ÐÑÕÏÃ]/g) ?? []).length +
+    (value.match(/Р./g) ?? []).length +
+    (value.match(/С./g) ?? []).length
+
+  return cyrillicChars * 4 + digitsAndSpaces - latinChars - controlChars * 8 - mojibakeMarkers * 6
+}
+
+function generateRepairCandidates(value: string) {
+  return [
+    value,
+    tryDecodeByteString(value, 'utf-8'),
+    tryDecodeByteString(value, 'windows-1251'),
+    tryRepairClassicMojibake(value),
+    tryDecodeByteString(tryRepairClassicMojibake(value), 'utf-8'),
+    tryRepairClassicMojibake(tryDecodeByteString(value, 'windows-1251')),
+    tryDecodeByteString(tryDecodeByteString(value, 'windows-1251'), 'utf-8'),
+  ]
+}
+
+function isClearlyBrokenText(value: string) {
+  if (!value.trim()) {
+    return false
+  }
+
+  const hasBrokenMarkers = /[ÐÑÕÏÃ]|ñë|Р.|С.|[\u0080-\u009f]/.test(value)
+  const controlChars = [...value].filter((char) => {
+    const code = char.charCodeAt(0)
+    return (code >= 0x00 && code <= 0x1f) || (code >= 0x7f && code <= 0x9f)
+  }).length
+  const cyrillicChars = (value.match(/[\u0400-\u04FF]/g) ?? []).length
+  const latinChars = (value.match(/[A-Za-z]/g) ?? []).length
+
+  return hasBrokenMarkers || controlChars > 0 || (cyrillicChars === 0 && latinChars > 2)
+}
+
+function repairMojibakeString(value: string) {
+  const trimmed = value.trim()
+
+  if (
+    !trimmed ||
+    trimmed.startsWith('data:') ||
+    trimmed.startsWith('blob:') ||
+    trimmed.startsWith('http://') ||
+    trimmed.startsWith('https://') ||
+    !looksLikeBrokenEncoding(trimmed)
+  ) {
+    return trimmed
+  }
+
+  const seen = new Set<string>()
+  let frontier = [trimmed]
+  const candidates: string[] = [trimmed]
+
+  for (let depth = 0; depth < 3; depth += 1) {
+    const nextFrontier: string[] = []
+
+    for (const candidate of frontier) {
+      for (const generated of generateRepairCandidates(candidate)) {
+        if (!seen.has(generated)) {
+          seen.add(generated)
+          candidates.push(generated)
+          nextFrontier.push(generated)
+        }
+      }
+    }
+
+    frontier = nextFrontier
+  }
+
+  return candidates.reduce((best, candidate) =>
+    scoreDecodedCandidate(candidate) > scoreDecodedCandidate(best) ? candidate : best,
+  )
+}
+
+function pickReadableString(primary: string, fallback: string) {
+  const repairedPrimary = repairMojibakeString(primary)
+  const repairedFallback = repairMojibakeString(fallback)
+
+  if (!repairedPrimary.trim()) {
+    return repairedFallback
+  }
+
+  if (isClearlyBrokenText(repairedPrimary) && !isClearlyBrokenText(repairedFallback)) {
+    return repairedFallback
+  }
+
+  return scoreDecodedCandidate(repairedFallback) > scoreDecodedCandidate(repairedPrimary) + 3
+    ? repairedFallback
+    : repairedPrimary
+}
+
+function repairStringFields<T>(value: T): T {
+  if (typeof value === 'string') {
+    return repairMojibakeString(value) as T
+  }
+
+  if (Array.isArray(value)) {
+    return value.map((entry) => repairStringFields(entry)) as T
+  }
+
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value).map(([key, entry]) => [key, repairStringFields(entry)]),
+    ) as T
+  }
+
+  return value
+}
+
+function normalizeAdventure(adventure: Adventure): Adventure {
+  const repairedAdventure = repairStringFields(adventure)
+
+  return {
+    ...repairedAdventure,
+    assetLibrary: repairedAdventure.assetLibrary ?? [],
+    audioLibrary: (repairedAdventure.audioLibrary ?? []).map((track) => ({
+      ...track,
+      assetId: track.assetId ?? null,
+      src: track.src ?? '',
+    })),
+    scenes: (repairedAdventure.scenes ?? []).map((scene) => ({
+      ...scene,
+      splash: {
+        title: pickReadableString(scene.splash?.title ?? '', scene.title),
+        subtitle: pickReadableString(scene.splash?.subtitle ?? '', scene.location),
+        body: pickReadableString(scene.splash?.body ?? '', scene.gmSummary ?? ''),
+        imageAssetId: scene.splash?.imageAssetId ?? null,
+        imageSrc: scene.splash?.imageSrc ?? null,
+      },
+      zones: (scene.zones ?? []).map((zone) => ({
+        ...zone,
+        focusNote: zone.focusNote ?? '',
+        linkedHandoutId:
+          scene.handouts?.some((handout) => handout.id === zone.linkedHandoutId)
+            ? zone.linkedHandoutId
+            : null,
+        linkedCheckId:
+          scene.checksClues?.some((entry) => entry.id === zone.linkedCheckId)
+            ? zone.linkedCheckId
+            : null,
+        linkedMonsterId:
+          scene.monsterBlocks?.some((monster) => monster.id === zone.linkedMonsterId)
+            ? zone.linkedMonsterId
+            : null,
+        autoRevealOnEnter: zone.autoRevealOnEnter ?? false,
+      })),
+      map: {
+        ...scene.map,
+        imageAssetId: scene.map.imageAssetId ?? null,
+        imageSrc: scene.map.imageSrc ?? null,
+      },
+      handouts: (scene.handouts ?? []).map((handout) => ({
+        ...handout,
+        imageAssetId: handout.imageAssetId ?? null,
+        imageSrc: handout.imageSrc ?? null,
+      })),
+      monsterBlocks: (scene.monsterBlocks ?? []).map((monster) => ({
+        ...monster,
+        imageAssetId: monster.imageAssetId ?? null,
+        imageSrc: monster.imageSrc ?? null,
+      })),
+    })),
+  }
+}
+
+function createDefaultMapViewport(): MapViewport {
+  return {
+    scale: 1,
+    offsetX: 0,
+    offsetY: 0,
+  }
+}
+
+function createBaseMapLayer(scene: AdventureScene): MapLayerInstance {
+  return {
+    id: `${scene.id}-base-layer`,
+    title: scene.map.title || 'Базовая карта',
+    imageSrc: scene.map.imageSrc ?? null,
+    visibleToGm: true,
+    visibleToPlayers: true,
+  }
+}
+
+function createInitialSceneRuntimeState(scene: AdventureScene): SceneRuntimeState {
+  return {
+    mapImageSrc: scene.map.imageSrc ?? null,
+    mapLayers: [createBaseMapLayer(scene)],
+    tokens: [],
+    activeInitiativeTokenId: null,
+    serviceMarkers: [],
+    fogCells: [],
+    mapViewport: createDefaultMapViewport(),
+  }
+}
+
+function sortTokensByInitiative(tokens: TokenInstance[]) {
+  return [...tokens].sort((left, right) => {
+    const leftInitiative =
+      typeof left.initiative === 'number' ? left.initiative : Number.NEGATIVE_INFINITY
+    const rightInitiative =
+      typeof right.initiative === 'number' ? right.initiative : Number.NEGATIVE_INFINITY
+
+    if (rightInitiative !== leftInitiative) {
+      return rightInitiative - leftInitiative
+    }
+
+    return left.name.localeCompare(right.name, 'ru')
+  })
+}
+
+function syncSceneRuntimeStateWithScene(
+  scene: AdventureScene,
+  currentSceneState?: SceneRuntimeState,
+): SceneRuntimeState {
+  const nextState = repairStringFields(
+    currentSceneState ?? createInitialSceneRuntimeState(scene),
+  )
+  const safeLayers =
+    nextState.mapLayers && nextState.mapLayers.length > 0
+      ? nextState.mapLayers
+      : [createBaseMapLayer(scene)]
+
+  const [firstLayer, ...otherLayers] = safeLayers
+  const baseLayer: MapLayerInstance = {
+    ...(firstLayer ?? createBaseMapLayer(scene)),
+    title: scene.map.title || firstLayer?.title || 'Базовая карта',
+    imageSrc:
+      nextState.mapImageSrc ??
+      firstLayer?.imageSrc ??
+      scene.map.imageSrc ??
+      null,
+    visibleToGm: firstLayer?.visibleToGm ?? true,
+    visibleToPlayers: firstLayer?.visibleToPlayers ?? true,
+  }
+
+  const normalizedTokens: TokenInstance[] = (nextState.tokens ?? []).map(
+    (token, index) => ({
+      ...token,
+      linkedMonsterId:
+        scene.monsterBlocks?.some((monster) => monster.id === token.linkedMonsterId)
+          ? token.linkedMonsterId
+          : null,
+      groupLabel: token.groupLabel ?? null,
+      rotation: typeof token.rotation === 'number' ? token.rotation : 0,
+      hiddenFromPlayers: token.hiddenFromPlayers ?? false,
+      hitPointsCurrent:
+        typeof token.hitPointsCurrent === 'number' ? token.hitPointsCurrent : null,
+      hitPointsMax: typeof token.hitPointsMax === 'number' ? token.hitPointsMax : null,
+      initiative: typeof token.initiative === 'number' ? token.initiative : null,
+      zIndex: token.zIndex ?? 10 + index,
+    }),
+  )
+  const normalizedServiceMarkers: ServiceMarker[] = (
+    nextState.serviceMarkers ?? []
+  ).map((marker, index) => ({
+    ...marker,
+    zIndex: marker.zIndex ?? 100 + index,
+  }))
+  const initiativeTokens = sortTokensByInitiative(normalizedTokens)
+  const activeInitiativeTokenId =
+    nextState.activeInitiativeTokenId &&
+    normalizedTokens.some((token) => token.id === nextState.activeInitiativeTokenId)
+      ? nextState.activeInitiativeTokenId
+      : (initiativeTokens[0]?.id ?? null)
+
+  return {
+    mapImageSrc: baseLayer.imageSrc,
+    mapLayers: [baseLayer, ...otherLayers],
+    tokens: normalizedTokens,
+    activeInitiativeTokenId,
+    serviceMarkers: normalizedServiceMarkers,
+    fogCells: nextState.fogCells ?? [],
+    mapViewport: {
+      ...createDefaultMapViewport(),
+      ...(nextState.mapViewport ?? {}),
+    },
+  }
+}
+
+export function createInitialSessionState(adventure: Adventure): SessionState {
+  const safeAdventure = normalizeAdventure(adventure)
+  const firstScene = safeAdventure.scenes[0]
+
+  return {
+    playerDisplay: {
+      sceneId: firstScene?.id ?? null,
+      mode: 'standby',
+      activeHandoutId: null,
+      updatedAt: new Date().toISOString(),
+    },
+    sceneStates: Object.fromEntries(
+      safeAdventure.scenes.map((scene) => [
+        scene.id,
+        createInitialSceneRuntimeState(scene),
+      ]),
+    ),
+  }
+}
+
+export function createInitialProjectState(adventure: Adventure): ProjectState {
+  const safeAdventure = normalizeAdventure(adventure)
+
+  return {
+    activeAdventureId: safeAdventure.id,
+    adventureOrder: [safeAdventure.id],
+    adventures: {
+      [safeAdventure.id]: safeAdventure,
+    },
+    sessions: {
+      [safeAdventure.id]: createInitialSessionState(safeAdventure),
+    },
+  }
+}
+
+export function syncSessionStateWithAdventure(
+  adventure: Adventure,
+  currentSession: SessionState,
+): SessionState {
+  const existingIds = new Set(adventure.scenes.map((scene) => scene.id))
+  const firstSceneId = adventure.scenes[0]?.id ?? null
+
+  const nextSceneStates = Object.fromEntries(
+    adventure.scenes.map((scene) => [
+      scene.id,
+      syncSceneRuntimeStateWithScene(scene, currentSession.sceneStates[scene.id]),
+    ]),
+  )
+
+  const nextSceneId = currentSession.playerDisplay.sceneId
+  const safeSceneId = nextSceneId && existingIds.has(nextSceneId) ? nextSceneId : firstSceneId
+
+  let safeHandoutId = currentSession.playerDisplay.activeHandoutId
+
+  if (currentSession.playerDisplay.mode === 'handout' && safeSceneId) {
+    const scene = adventure.scenes.find((entry) => entry.id === safeSceneId)
+    const handoutExists = scene?.handouts.some(
+      (entry) => entry.id === safeHandoutId,
+    )
+
+    if (!handoutExists) {
+      safeHandoutId = scene?.handouts[0]?.id ?? null
+    }
+  } else {
+    safeHandoutId = null
+  }
+
+  return {
+    playerDisplay: {
+      ...currentSession.playerDisplay,
+      sceneId: safeSceneId,
+      activeHandoutId: safeHandoutId,
+      updatedAt: new Date().toISOString(),
+    },
+    sceneStates: nextSceneStates,
+  }
+}
+
+function isLegacyProjectState(
+  value: unknown,
+): value is { adventure: Adventure; session: SessionState } {
+  if (!value || typeof value !== 'object') {
+    return false
+  }
+
+  return 'adventure' in value && 'session' in value
+}
+
+export function syncProjectState(currentState: ProjectState): ProjectState {
+  const safeOrder = currentState.adventureOrder.filter(
+    (adventureId) => currentState.adventures[adventureId],
+  )
+  const missingIds = Object.keys(currentState.adventures).filter(
+    (adventureId) => !safeOrder.includes(adventureId),
+  )
+  const adventureOrder = [...safeOrder, ...missingIds]
+  const fallbackAdventureId = adventureOrder[0] ?? null
+  const activeAdventureId =
+    currentState.activeAdventureId && currentState.adventures[currentState.activeAdventureId]
+      ? currentState.activeAdventureId
+      : fallbackAdventureId
+
+  const sessions = Object.fromEntries(
+    adventureOrder.map((adventureId) => {
+      const adventure = normalizeAdventure(currentState.adventures[adventureId])
+      const session =
+        currentState.sessions[adventureId] ?? createInitialSessionState(adventure)
+
+      return [adventureId, syncSessionStateWithAdventure(adventure, session)]
+    }),
+  )
+
+  return {
+    activeAdventureId,
+    adventureOrder,
+    adventures: Object.fromEntries(
+      adventureOrder.map((adventureId) => [
+        adventureId,
+        normalizeAdventure(currentState.adventures[adventureId]),
+      ]),
+    ),
+    sessions,
+  }
+}
+
+export function getActiveAdventureBundle(state: ProjectState) {
+  const adventureId = state.activeAdventureId
+
+  if (!adventureId) {
+    return null
+  }
+
+  const adventure = state.adventures[adventureId]
+  const session = state.sessions[adventureId]
+
+  if (!adventure || !session) {
+    return null
+  }
+
+  return {
+    adventureId,
+    adventure,
+    session,
+  }
+}
+
+export function loadProjectState(fallback: ProjectState): ProjectState {
+  const raw = window.localStorage.getItem(projectStateStorageKey)
+
+  if (!raw) {
+    return syncProjectState(fallback)
+  }
+
+  try {
+    const parsed = JSON.parse(raw) as ProjectState | { adventure: Adventure; session: SessionState }
+
+    if (isLegacyProjectState(parsed)) {
+      return syncProjectState({
+        activeAdventureId: parsed.adventure.id,
+        adventureOrder: [parsed.adventure.id],
+        adventures: {
+          [parsed.adventure.id]: parsed.adventure,
+        },
+        sessions: {
+          [parsed.adventure.id]: parsed.session,
+        },
+      })
+    }
+
+    return syncProjectState(parsed as ProjectState)
+  } catch {
+    return syncProjectState(fallback)
+  }
+}
+
+export function saveProjectState(state: ProjectState) {
+  window.localStorage.setItem(projectStateStorageKey, JSON.stringify(state))
+}
