@@ -1,0 +1,133 @@
+.badge {
+  position: absolute;
+  left: 16px;
+  right: 16px;
+  bottom: 16px;
+  z-index: 6;
+  display: block;
+  min-width: 0;
+  padding: 0;
+  border-radius: 0;
+  background: transparent;
+  color: rgba(255, 247, 235, 0.86);
+  font-size: 0.82rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  pointer-events: none;
+}
+
+.header {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  display: grid;
+  gap: 6px;
+  max-width: min(460px, calc(100% - 32px));
+  padding: 8px 10px;
+  border-radius: 12px;
+  background: rgba(24, 18, 13, 0.08);
+  color: rgba(255, 247, 235, 0.86);
+  font-weight: 500;
+  backdrop-filter: blur(4px);
+  pointer-events: auto;
+}
+
+.topline {
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.label {
+  min-width: 0;
+  overflow: hidden;
+  font-weight: 700;
+  line-height: 1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.status {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  column-gap: 10px;
+  row-gap: 3px;
+  align-items: baseline;
+  min-width: 0;
+  color: rgba(255, 247, 235, 0.66);
+  font-size: 0.72rem;
+  font-weight: 400;
+  letter-spacing: 0;
+  line-height: 1.15;
+  text-transform: none;
+  white-space: nowrap;
+}
+
+.status > * {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.status > span {
+  color: rgba(255, 247, 235, 0.5);
+}
+
+.status strong {
+  color: rgba(255, 247, 235, 0.82);
+  font-size: inherit;
+  font-weight: 400;
+}
+
+.actions {
+  position: absolute;
+  left: 50%;
+  bottom: 0;
+  transform: translateX(-50%);
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px;
+  pointer-events: auto;
+}
+
+.actionButton {
+  width: 38px;
+  min-width: 38px;
+  height: 38px;
+  min-height: 38px;
+  border-radius: 12px;
+  font-size: 0.95rem;
+  box-shadow: 0 6px 14px rgba(28, 20, 13, 0.14);
+}
+
+.editButton {
+  width: 22px;
+  height: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  color: rgba(255, 247, 235, 0.92);
+  cursor: pointer;
+  transition:
+    background 140ms ease,
+    border-color 140ms ease,
+    color 140ms ease;
+}
+
+.editButton:hover,
+.editButton:focus-visible {
+  background: transparent;
+  color: #fffaf0;
+}
+
+.editButton i {
+  font-size: 0.68rem;
+  line-height: 1;
+}

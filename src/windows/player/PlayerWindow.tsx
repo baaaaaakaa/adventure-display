@@ -3,26 +3,11 @@ import { sampleAdventure } from '../../data/sampleAdventure'
 import {
   createInitialProjectState,
   getActiveAdventureBundle,
-  loadProjectState,
   playerDisplayChannelName,
 } from '../../lib/playerDisplay'
+import { getFogCellRects, getZoneFogRect } from '../../lib/fog'
+import { defaultMapGrid, tokenSpaceFootprints } from '../../types/adventure'
 import type { ProjectState } from '../../types/adventure'
-
-const fogGridColumns = 24
-const fogGridRows = 16
-
-function getFogCellStyle(cellId: string) {
-  const [columnRaw, rowRaw] = cellId.split(':')
-  const column = Number(columnRaw)
-  const row = Number(rowRaw)
-
-  return {
-    left: `${(column / fogGridColumns) * 100}%`,
-    top: `${(row / fogGridRows) * 100}%`,
-    width: `${100 / fogGridColumns}%`,
-    height: `${100 / fogGridRows}%`,
-  }
-}
 
 function EmptyPlayerState() {
   return (
@@ -41,7 +26,7 @@ function EmptyPlayerState() {
 
 export function PlayerWindow() {
   const [projectState, setProjectState] = useState<ProjectState>(() =>
-    loadProjectState(createInitialProjectState(sampleAdventure)),
+    createInitialProjectState(sampleAdventure),
   )
 
   useEffect(() => {
@@ -82,6 +67,25 @@ export function PlayerWindow() {
     sceneRuntime?.mapLayers.filter(
       (layer) => layer.visibleToPlayers && layer.imageSrc,
     ) ?? []
+  const mapGrid = sceneRuntime?.mapGrid ?? defaultMapGrid
+  const isMapGridVisible = sceneRuntime?.mapGridVisible ?? true
+  const mapViewport = sceneRuntime?.mapViewport ?? {
+    scale: 1,
+    offsetX: 0,
+    offsetY: 0,
+  }
+  const hiddenFogZones = sceneRuntime
+    ? scene.zones.filter((zone) => sceneRuntime.hiddenZoneIds.includes(zone.id))
+    : []
+  const effectiveFogCells = sceneRuntime
+    ? sceneRuntime.fogCells ?? []
+    : []
+  const fogCellRects = getFogCellRects(effectiveFogCells, mapGrid)
+  const hiddenFogZoneRects = hiddenFogZones.map((zone) => getZoneFogRect(zone))
+  const playerFogMaskId = `player-fog-mask-${scene.id.replace(/[^a-zA-Z0-9_-]/g, '-')}`
+  const playerFogSoftEdgeId = `player-fog-soft-edge-${scene.id.replace(/[^a-zA-Z0-9_-]/g, '-')}`
+  const playerFogClipId = `player-fog-clip-${scene.id.replace(/[^a-zA-Z0-9_-]/g, '-')}`
+  const hasPlayerFog = fogCellRects.length > 0 || hiddenFogZoneRects.length > 0
   const playerVisibleZones = scene.zones.filter((zone) => zone.visibleToPlayers)
   const orderedTokens = [...(sceneRuntime?.tokens ?? [])]
     .filter((token) => !token.hiddenFromPlayers)
@@ -201,7 +205,7 @@ export function PlayerWindow() {
 
   return (
     <main
-      className={`player-stage player-stage-enter accent-${scene.accent}`}
+      className={`player-stage player-stage-enter player-map-stage accent-${scene.accent}`}
       key={presentationKey}
     >
       <section className="player-map-shell">
@@ -220,20 +224,39 @@ export function PlayerWindow() {
 
         <div
           className={`player-map-board ${playerVisibleLayers.length > 0 ? 'with-image' : ''}`}
+          style={{
+            aspectRatio: `${mapGrid.columns} / ${mapGrid.rows}`,
+            maxWidth: `min(100%, calc((100vh - 170px) * ${mapGrid.columns / mapGrid.rows}))`,
+          }}
         >
           <div className="player-map-vignette" />
-          <div className="map-transform-layer">
+          <div
+            className="map-transform-layer"
+            style={{
+              transform: `translate(${mapViewport.offsetX}px, ${mapViewport.offsetY}px) scale(${mapViewport.scale})`,
+            }}
+          >
             <div className="map-layer-stack">
               {playerVisibleLayers.map((layer) => (
                 <div
                   key={layer.id}
                   className="map-layer"
-                  style={{ backgroundImage: layer.imageSrc ? `url(${layer.imageSrc})` : undefined }}
+                  style={{
+                    backgroundImage: layer.imageSrc ? `url(${layer.imageSrc})` : undefined,
+                    transform: `scale(${layer.scale}) rotate(${layer.rotation}deg)`,
+                  }}
                 />
               ))}
             </div>
 
-            <div className="map-grid-overlay" />
+            {isMapGridVisible ? (
+              <div
+                className="map-grid-overlay"
+                style={{
+                  backgroundSize: `calc(100vw / ${mapGrid.columns}) calc(100vw / ${mapGrid.columns})`,
+                }}
+              />
+            ) : null}
 
             {playerVisibleZones.map((zone) => (
               <div
@@ -254,33 +277,112 @@ export function PlayerWindow() {
             {orderedTokens.map((token) => (
               <div
                 key={token.id}
+                data-tooltip-disabled="true"
                 className={`token token-${token.kind} player-token ${
                   token.id === activeInitiativeToken?.id ? 'active-turn' : ''
                 }`}
                 style={{
                   left: `${token.x}%`,
                   top: `${token.y}%`,
-                  width: `${token.size}px`,
-                  height: `${token.size}px`,
+                  width: `calc((100vw / ${mapGrid.columns}) * ${tokenSpaceFootprints[token.space]})`,
                   backgroundImage: `url(${token.imageSrc})`,
                   transform: `translate(-50%, -50%) rotate(${token.rotation}deg)`,
                   zIndex: token.zIndex,
                 }}
-                title={token.name}
               >
-                <span>{token.name}</span>
+                <span className="token-label">{token.name}</span>
               </div>
             ))}
 
-            <div className="fog-layer fog-layer-player">
-              {sceneRuntime?.fogCells.map((cellId) => (
-                <div
-                  key={cellId}
-                  className="fog-cell"
-                  style={getFogCellStyle(cellId)}
+            {hasPlayerFog ? (
+              <svg
+                className="fog-layer fog-layer-player"
+                viewBox="0 0 100 100"
+                preserveAspectRatio="none"
+                aria-hidden="true"
+                focusable="false"
+              >
+                <defs>
+                  <filter id={playerFogSoftEdgeId} x="-4%" y="-4%" width="108%" height="108%">
+                    <feMorphology operator="erode" radius="0.22" />
+                    <feGaussianBlur stdDeviation="0.42" />
+                  </filter>
+                  <clipPath id={playerFogClipId} clipPathUnits="userSpaceOnUse">
+                    {hiddenFogZoneRects.map((zone) => (
+                      <rect
+                        key={`clip-zone-${zone.id}`}
+                        x={zone.x}
+                        y={zone.y}
+                        width={zone.width}
+                        height={zone.height}
+                      />
+                    ))}
+                    {fogCellRects.map((cell) => (
+                      <rect
+                        key={`clip-cell-${cell.id}`}
+                        x={cell.x}
+                        y={cell.y}
+                        width={cell.width}
+                        height={cell.height}
+                      />
+                    ))}
+                  </clipPath>
+                  <mask id={playerFogMaskId} maskUnits="userSpaceOnUse" x="0" y="0" width="100" height="100">
+                    <rect x="0" y="0" width="100" height="100" fill="black" />
+                    <g
+                      fill="white"
+                      clipPath={`url(#${playerFogClipId})`}
+                      filter={`url(#${playerFogSoftEdgeId})`}
+                    >
+                      {hiddenFogZoneRects.map((zone) => (
+                        <rect
+                          key={`zone-${zone.id}`}
+                          x={zone.x}
+                          y={zone.y}
+                          width={zone.width}
+                          height={zone.height}
+                        />
+                      ))}
+                      {fogCellRects.map((cell) => (
+                        <rect
+                          key={`cell-${cell.id}`}
+                          x={cell.x}
+                          y={cell.y}
+                          width={cell.width}
+                          height={cell.height}
+                        />
+                      ))}
+                    </g>
+                  </mask>
+                </defs>
+                <rect
+                  className="fog-player-base"
+                  x="0"
+                  y="0"
+                  width="100"
+                  height="100"
+                  mask={`url(#${playerFogMaskId})`}
                 />
-              ))}
-            </div>
+                <image
+                  className="fog-player-texture"
+                  href="/fog-pattern.png"
+                  x="0"
+                  y="0"
+                  width="100"
+                  height="100"
+                  preserveAspectRatio="xMidYMid slice"
+                  mask={`url(#${playerFogMaskId})`}
+                />
+                <rect
+                  className="fog-player-veil"
+                  x="0"
+                  y="0"
+                  width="100"
+                  height="100"
+                  mask={`url(#${playerFogMaskId})`}
+                />
+              </svg>
+            ) : null}
           </div>
 
           {playerVisibleLayers.length === 0 ? (

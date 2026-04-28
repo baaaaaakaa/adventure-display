@@ -1,0 +1,13 @@
+.panel {
+  position: absolute;
+  top: 72px;
+  left: 16px;
+  right: auto;
+  z-index: 9;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  width: auto;
+  max-width: min(100vw - 32px, 220px);
+}

@@ -15,6 +15,7 @@ The root object must contain:
 - `title`: player-safe adventure title
 - `subtitle`: short GM-facing descriptor for the scenario
 - `audioLibrary`: reusable library of local music, ambience, and sfx tracks
+- `characters`: reusable player character cards for the whole adventure
 - `scenes`: ordered array of scenes
 
 Example:
@@ -25,6 +26,7 @@ Example:
   "title": "Death House",
   "subtitle": "Local GM station with a dedicated player display",
   "audioLibrary": [],
+  "characters": [],
   "scenes": []
 }
 ```
@@ -108,6 +110,23 @@ Example:
   "src": "audio/foyer-drone.mp3"
 }
 ```
+
+## Player character object
+
+`characters` stores player character cards shared by the whole adventure, not by
+an individual scene.
+
+Cards can be imported from Long Story Short character JSON. The importer reads
+the outer `jsonType: "character"` wrapper and parses the nested `data` string.
+
+Good content:
+
+- player character stats, skills, saves, attacks, HP, AC, and speed
+- personality, equipment, goals, notes, and spellcasting sections
+- portrait or avatar image
+
+These cards may be linked to player tokens, but their authored data should stay
+at the adventure level.
 
 ## Map object
 

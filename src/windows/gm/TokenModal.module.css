@@ -1,0 +1,637 @@
+.hero {
+  display: grid;
+  grid-template-columns: 112px minmax(0, 1fr);
+  gap: 14px;
+  align-items: start;
+}
+
+.heroFields {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+
+.imageUpload {
+  display: grid;
+  gap: 10px;
+}
+
+.imagePicker {
+  display: grid;
+  width: max-content;
+  cursor: pointer;
+}
+
+.imagePreview {
+  position: relative;
+  width: 96px;
+  height: 96px;
+  overflow: hidden;
+  border-radius: 24px;
+  border: 1px solid var(--line);
+  background:
+    radial-gradient(circle at 30% 30%, rgba(255, 255, 255, 0.18), transparent 45%),
+    rgba(20, 16, 13, 0.78);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.06);
+}
+
+.imagePreview img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.imagePicker:hover :global(.token-image-overlay),
+.imagePicker:focus-within :global(.token-image-overlay) {
+  opacity: 1;
+}
+
+.layerField {
+  width: auto;
+}
+
+.layerField input[type='number'] {
+  width: 92px;
+  min-width: 92px;
+}
+
+.visibilityToggle {
+  justify-self: start;
+  align-self: end;
+}
+
+.conditionField {
+  min-width: 170px;
+}
+
+.conditionShelf {
+  min-width: 0;
+  min-height: 32px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  justify-content: flex-start;
+}
+
+.conditionBadge {
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  border: 1px solid rgba(174, 123, 51, 0.26);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.32);
+  color: var(--text);
+  overflow: hidden;
+}
+
+.conditionBadgeInfo,
+.conditionBadgeRemove {
+  display: inline-grid;
+  place-items: center;
+  min-height: 28px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.conditionBadgeInfo {
+  max-width: 160px;
+  padding: 5px 8px 5px 10px;
+  font-size: 0.74rem;
+  font-weight: 700;
+  line-height: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.conditionBadge:hover {
+  border-color: rgba(174, 123, 51, 0.42);
+  background: rgba(255, 255, 255, 0.46);
+}
+
+.conditionBadgeRemove {
+  width: 26px;
+  border-left: 1px solid rgba(174, 123, 51, 0.2);
+  color: var(--text-muted);
+}
+
+.conditionBadgeRemove i {
+  font-size: 0.68rem;
+}
+
+.conditionModal {
+  width: min(520px, calc(100vw - 32px));
+  background: #f4f0cf;
+  color: #173322;
+}
+
+.conditionModalHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid rgba(27, 58, 37, 0.18);
+}
+
+.conditionModalHeader h3 {
+  margin: 4px 0 0;
+  color: #123b26;
+  font-family: var(--display);
+  font-size: 1.45rem;
+  line-height: 1.05;
+}
+
+.conditionModalHeader p {
+  margin: 4px 0 0;
+  color: rgba(23, 51, 34, 0.62);
+  font-size: 0.8rem;
+  line-height: 1.2;
+}
+
+.conditionModalBody {
+  display: grid;
+  gap: 12px;
+  padding-top: 14px;
+}
+
+.conditionModalBody p,
+.conditionModalBody ul {
+  margin: 0;
+  color: rgba(30, 43, 33, 0.84);
+  font-size: 0.95rem;
+  line-height: 1.45;
+}
+
+.conditionModalBody ul {
+  display: grid;
+  gap: 8px;
+  padding-left: 20px;
+}
+
+.conditionModalBody a {
+  color: #8b5a26;
+  font-size: 0.82rem;
+  font-weight: 800;
+  text-decoration: none;
+}
+
+.monsterTokenControls {
+  display: grid;
+  grid-template-columns: minmax(120px, 0.65fr) minmax(0, 1.35fr);
+  gap: 10px;
+  align-items: end;
+}
+
+.playerTokenControls {
+  display: grid;
+  grid-template-columns: minmax(120px, 0.65fr) minmax(0, 1.35fr);
+  gap: 10px;
+  align-items: end;
+}
+
+.monsterTokenActions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 8px;
+}
+
+.monsterPreview {
+  display: grid;
+  gap: 14px;
+  padding: 16px;
+  border: 1px solid rgba(111, 94, 57, 0.2);
+  border-radius: 18px;
+  background: #f4f0cf;
+  color: #173322;
+}
+
+.monsterPreviewHeader {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 12px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid rgba(27, 58, 37, 0.22);
+}
+
+.monsterPreviewTitle {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.monsterPreviewTitle h3 {
+  margin: 0;
+  color: #0d3b26;
+  font-family: var(--display);
+  font-size: 1.55rem;
+  line-height: 1.05;
+  font-weight: 700;
+}
+
+.monsterPreviewTitle p,
+.monsterSource {
+  margin: 0;
+  color: rgba(23, 51, 34, 0.72);
+  font-size: 0.88rem;
+  line-height: 1.25;
+}
+
+.monsterSource {
+  white-space: nowrap;
+}
+
+.monsterPreviewMeta {
+  display: grid;
+  gap: 8px;
+  justify-items: end;
+  min-width: 220px;
+}
+
+.monsterPreviewBody {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 128px;
+  gap: 16px;
+  align-items: start;
+}
+
+.monsterPreviewMain {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+
+.monsterInfoBlock {
+  display: grid;
+  gap: 5px;
+}
+
+.monsterInfoLine {
+  margin: 0;
+  color: rgba(30, 43, 33, 0.82);
+  font-size: 0.92rem;
+  line-height: 1.32;
+}
+
+.monsterInfoLine strong {
+  color: #123b26;
+}
+
+.monsterAbilityGrid {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.monsterAbility {
+  display: grid;
+  gap: 4px;
+  overflow: hidden;
+  border-radius: 8px;
+  background: rgba(81, 83, 47, 0.16);
+  text-align: center;
+}
+
+.monsterAbility strong {
+  padding: 7px 4px 5px;
+  background: rgba(87, 89, 52, 0.16);
+  color: #123b26;
+  font-size: 0.78rem;
+  line-height: 1;
+}
+
+.monsterAbility span {
+  padding: 0 4px 8px;
+  color: #1e67c8;
+  font-size: 0.86rem;
+  line-height: 1.1;
+  white-space: nowrap;
+}
+
+.monsterPortrait {
+  width: 128px;
+  height: 128px;
+  object-fit: cover;
+  border: 4px solid rgba(144, 89, 41, 0.72);
+  border-radius: 999px;
+  background: rgba(20, 16, 13, 0.18);
+  box-shadow: 0 8px 18px rgba(37, 28, 15, 0.18);
+}
+
+.monsterNotes {
+  margin: 0;
+  padding-top: 12px;
+  border-top: 1px solid rgba(27, 58, 37, 0.16);
+  color: rgba(30, 43, 33, 0.82);
+  font-size: 0.92rem;
+  line-height: 1.4;
+  white-space: pre-wrap;
+}
+
+.monsterSections {
+  display: grid;
+  gap: 16px;
+}
+
+.monsterSection {
+  display: grid;
+  gap: 8px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(27, 58, 37, 0.18);
+}
+
+.monsterSection h4 {
+  margin: 0;
+  color: #0d3b26;
+  font-family: var(--display);
+  font-size: 1.22rem;
+  line-height: 1.15;
+}
+
+.monsterFeatureList {
+  display: grid;
+  gap: 8px;
+}
+
+.monsterFeature {
+  margin: 0;
+  color: rgba(30, 43, 33, 0.84);
+  font-size: 0.92rem;
+  line-height: 1.42;
+}
+
+.monsterFeature strong {
+  color: #123b26;
+  font-style: italic;
+}
+
+.characterPreview {
+  display: grid;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid rgba(111, 94, 57, 0.22);
+  border-radius: 14px;
+  background: rgba(35, 25, 17, 0.06);
+}
+
+.characterPreviewHeader {
+  display: grid;
+  grid-template-columns: 52px minmax(0, 1fr) minmax(220px, 1.35fr);
+  gap: 10px;
+  align-items: center;
+}
+
+.characterPortrait,
+.characterPortraitPlaceholder {
+  width: 52px;
+  height: 52px;
+  border-radius: 12px;
+  border: 1px solid rgba(174, 123, 51, 0.28);
+  background: rgba(35, 25, 17, 0.16);
+  object-fit: cover;
+}
+
+.characterPortraitPlaceholder {
+  display: grid;
+  place-items: center;
+  color: var(--text-muted);
+  font-size: 1rem;
+  font-weight: 800;
+}
+
+.characterPreviewTitle {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.characterPreviewTitle p {
+  margin: 0;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.characterTitleRow {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.characterPreviewTitle h3 {
+  margin: 0;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text);
+  font-size: 1.02rem;
+  line-height: 1.1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.characterPreviewTitle p {
+  color: var(--text-muted);
+  font-size: 0.76rem;
+}
+
+.characterPreviewActions {
+  min-width: 0;
+  display: flex;
+  align-items: flex-start;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.characterOpenButton {
+  flex: 0 0 auto;
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: #3f3027;
+  cursor: pointer;
+  padding: 0;
+}
+
+.characterOpenButton:hover,
+.characterOpenButton:focus-visible {
+  background: transparent;
+  color: #8d4d2a;
+}
+
+.characterOpenButton i {
+  font-size: 1rem;
+  line-height: 1;
+}
+
+.characterStatGrid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.characterStat {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+  padding: 6px;
+  border: 1px solid rgba(174, 123, 51, 0.2);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.34);
+  text-align: center;
+}
+
+.characterStat span {
+  color: var(--text-muted);
+  font-size: 0.58rem;
+  font-weight: 800;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.characterStat strong {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text);
+  font-size: 0.82rem;
+  line-height: 1.1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.characterPreviewSection {
+  display: grid;
+  gap: 6px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(174, 123, 51, 0.18);
+}
+
+.characterPreviewSection h4 {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 0.62rem;
+  font-weight: 800;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.characterPassiveGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.characterPassive,
+.characterAbility {
+  min-width: 0;
+  display: grid;
+  border: 1px solid rgba(174, 123, 51, 0.18);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.28);
+}
+
+.characterPassive {
+  grid-template-columns: minmax(0, 1fr) 32px;
+  align-items: center;
+  min-height: 28px;
+  padding-left: 7px;
+}
+
+.characterPassive span {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.characterPassive strong {
+  display: grid;
+  place-items: center;
+  height: 100%;
+  border-left: 1px solid rgba(174, 123, 51, 0.18);
+  color: var(--text);
+  font-size: 0.78rem;
+}
+
+.characterAbilityGrid {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 5px;
+}
+
+.characterAbility {
+  gap: 2px;
+  padding: 5px 4px;
+  text-align: center;
+}
+
+.characterAbility span,
+.characterAbility em {
+  color: var(--text-muted);
+  font-size: 0.58rem;
+  font-style: normal;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.characterAbility strong {
+  color: var(--text);
+  font-size: 0.86rem;
+  line-height: 1;
+}
+
+@media (max-width: 860px) {
+  .hero {
+    grid-template-columns: 1fr;
+  }
+
+  .monsterTokenControls,
+  .playerTokenControls,
+  .characterPreviewHeader,
+  .monsterPreviewHeader,
+  .monsterPreviewBody {
+    grid-template-columns: 1fr;
+  }
+
+  .monsterPreviewMeta {
+    justify-items: start;
+    min-width: 0;
+  }
+
+  .characterPreviewActions {
+    justify-content: flex-start;
+  }
+
+  .monsterPortrait {
+    width: 104px;
+    height: 104px;
+  }
+
+  .monsterAbilityGrid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .characterStatGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .characterPassiveGrid,
+  .characterAbilityGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}

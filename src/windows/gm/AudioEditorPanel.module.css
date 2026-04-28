@@ -1,0 +1,129 @@
+.uploadGrid,
+.list,
+.playerCard {
+  display: grid;
+  gap: 12px;
+}
+
+.playerCard {
+  padding-top: 8px;
+  border-top: 1px solid rgba(58, 43, 31, 0.1);
+}
+
+.playerCard h3 {
+  margin: 0.2rem 0 0;
+  font-family: var(--display);
+  font-size: 1.35rem;
+}
+
+.controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.settingsGrid {
+  display: grid;
+  gap: 12px;
+}
+
+.card {
+  text-align: left;
+  display: grid;
+  gap: 6px;
+  padding: 14px 16px;
+  border-radius: 18px;
+  border: 1px solid transparent;
+  background: rgba(255, 255, 255, 0.55);
+  color: var(--text);
+}
+
+.card strong {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.active {
+  border-color: rgba(198, 95, 63, 0.28);
+  background: rgba(255, 255, 255, 0.92);
+}
+
+.cardHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.meta {
+  font-size: 0.86rem;
+  color: var(--text-muted);
+}
+
+.kind {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.kindMusic {
+  background: rgba(198, 95, 63, 0.14);
+  color: var(--ember);
+}
+
+.kindAmbience {
+  background: rgba(46, 122, 120, 0.14);
+  color: var(--teal);
+}
+
+.kindSfx {
+  background: rgba(174, 123, 51, 0.18);
+  color: var(--gold);
+}
+
+:global(.scene-editor-panel.is-modal-open) .uploadGrid,
+:global(.scene-editor-panel.is-modal-open) .list {
+  gap: 8px;
+}
+
+:global(.scene-editor-panel.is-modal-open) .uploadGrid {
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+}
+
+:global(.scene-editor-panel.is-modal-open) .card {
+  gap: 5px;
+  padding: 12px 13px;
+  border-radius: 16px;
+}
+
+:global(.scene-editor-panel.is-modal-open) .playerCard {
+  gap: 10px;
+  padding: 14px;
+  border-top: 0;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid rgba(58, 43, 31, 0.1);
+}
+
+:global(.scene-editor-panel.is-modal-open) .controls {
+  gap: 8px;
+}
+
+:global(.scene-editor-panel.is-modal-open) .controls :global(.primary-button),
+:global(.scene-editor-panel.is-modal-open) .controls :global(.ghost-button) {
+  min-height: 40px;
+  padding: 8px 14px;
+  border-radius: 14px;
+}
+
+:global(.scene-editor-panel.is-modal-open) .kind {
+  padding: 3px 9px;
+  font-size: 0.68rem;
+}

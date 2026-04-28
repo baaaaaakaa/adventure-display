@@ -1,0 +1,152 @@
+.dialog {
+  width: min(560px, 100%);
+  gap: 10px;
+  padding: var(--modal-top-inset) 16px 16px;
+}
+
+.dialog :global(.modal-header) {
+  margin-bottom: 0;
+}
+
+.dialog :global(.control-group-copy) {
+  gap: 1px;
+}
+
+.dialog :global(.field) {
+  gap: 2px;
+}
+
+.dialog :global(.field span) {
+  font-size: 0.7rem;
+}
+
+.dialog :global(input),
+.dialog :global(textarea) {
+  min-height: 38px;
+  padding: 6px 10px;
+  border-radius: 12px;
+}
+
+.dialog :global(.compact-button) {
+  min-height: 30px;
+  padding: 5px 9px;
+  font-size: 0.82rem;
+}
+
+.dialog :global(.editor-hint) {
+  font-size: 0.78rem;
+  line-height: 1.25;
+}
+
+.stack {
+  gap: 8px;
+  padding-right: 6px;
+}
+
+.titleRow {
+  gap: 8px;
+  align-items: center;
+}
+
+.titleRow :global(.eyebrow) {
+  display: inline-flex;
+  align-items: center;
+  height: 22px;
+  line-height: 1;
+}
+
+.deleteButton {
+  width: 22px;
+  min-width: 22px;
+  height: 22px;
+  min-height: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  margin: 0;
+  align-self: center;
+  border-radius: 6px;
+  color: var(--text-muted);
+  transform: translateY(-1px);
+}
+
+.deleteButton i {
+  font-size: 0.72rem;
+  line-height: 1;
+}
+
+.toggleRow {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.toggleButton {
+  position: relative;
+  width: 22px;
+  min-width: 22px;
+  height: 22px;
+  min-height: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 1px solid rgba(78, 108, 132, 0.18);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-muted);
+  line-height: 1;
+  box-shadow: none;
+}
+
+.toggleButton i {
+  font-size: 0.68rem;
+  line-height: 1;
+}
+
+.toggleButton:hover,
+.toggleButton:focus-visible {
+  border-color: rgba(63, 137, 178, 0.38);
+  background: rgba(63, 137, 178, 0.08);
+  color: #2f6f95;
+  box-shadow: none;
+  transform: none;
+}
+
+.active {
+  border-color: rgba(63, 137, 178, 0.42);
+  background: rgba(63, 137, 178, 0.16);
+  color: #2f6f95;
+}
+
+.toggleButton[data-tooltip]::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + 8px);
+  z-index: 20;
+  width: max-content;
+  max-width: min(190px, calc(100vw - 72px));
+  padding: 7px 9px;
+  border-radius: 10px;
+  background: rgba(28, 20, 13, 0.92);
+  color: #fff6e8;
+  font-size: 0.72rem;
+  font-weight: 500;
+  line-height: 1.15;
+  text-align: center;
+  white-space: normal;
+  opacity: 0;
+  pointer-events: none;
+  transform: translate(-50%, 5px);
+  transition:
+    opacity 140ms ease,
+    transform 140ms ease;
+}
+
+.toggleButton[data-tooltip]:hover::after,
+.toggleButton[data-tooltip]:focus-visible::after {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}

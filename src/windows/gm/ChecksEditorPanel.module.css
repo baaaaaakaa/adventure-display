@@ -1,0 +1,129 @@
+.table {
+  display: grid;
+  gap: 10px;
+}
+
+.row {
+  display: grid;
+  grid-template-columns: minmax(120px, 0.9fr) minmax(110px, 0.7fr) minmax(0, 1.6fr) auto;
+  gap: 10px;
+  align-items: start;
+  padding: 12px;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.58);
+  border: 1px solid rgba(58, 43, 31, 0.1);
+}
+
+.headerRow {
+  background: transparent;
+  border: 0;
+  padding: 0 6px;
+  font-size: 0.82rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+}
+
+.choiceCell {
+  display: grid;
+  gap: 8px;
+}
+
+.list {
+  min-height: 0;
+  display: grid;
+  gap: 8px;
+  align-content: start;
+}
+
+.linkedCard {
+  display: grid;
+  gap: 12px;
+  padding: 14px var(--modal-content-inset);
+  border-radius: 18px;
+  border: 1px solid rgba(46, 122, 120, 0.22);
+  background: rgba(255, 255, 255, 0.78);
+}
+
+.linkedCardMeta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-muted);
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.linkedCardMeta strong {
+  color: var(--text);
+  font-size: 0.78rem;
+}
+
+.linkedCard p {
+  margin: 0;
+  color: var(--text);
+  font-size: 0.95rem;
+  line-height: 1.5;
+}
+
+:global(.scene-editor-panel.is-modal-open) .table {
+  gap: 8px;
+}
+
+:global(.scene-editor-panel.is-modal-open) .row {
+  grid-template-columns: minmax(108px, 0.85fr) minmax(92px, 0.68fr) minmax(0, 1.5fr) auto;
+  gap: 8px;
+  padding: 10px;
+  border-radius: 16px;
+  align-items: stretch;
+}
+
+:global(.scene-editor-panel.is-modal-open.scene-editor-panel-checks) .table {
+  min-height: 0;
+  height: 100%;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  align-content: stretch;
+  padding-inline: var(--modal-content-inset);
+}
+
+:global(.scene-editor-panel.is-modal-open) .headerRow {
+  padding: 0 10px;
+  font-size: 0.76rem;
+}
+
+:global(.scene-editor-panel.is-modal-open) .headerRow span {
+  padding-left: 0;
+}
+
+:global(.scene-editor-panel.is-modal-open) .headerRow span:first-child {
+  padding-left: 12px;
+}
+
+:global(.scene-editor-panel.is-modal-open) .headerRow span:nth-child(3) {
+  transform: translateX(-8px);
+}
+
+:global(.scene-editor-panel.is-modal-open.scene-editor-panel-checks) .list {
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-right: 6px;
+}
+
+:global(.scene-editor-panel.is-modal-open) .row > * {
+  min-width: 0;
+}
+
+:global(.scene-editor-panel.is-modal-open) .row textarea {
+  min-height: 92px;
+}
+
+@media (max-width: 860px) {
+  .row {
+    grid-template-columns: 1fr;
+  }
+}

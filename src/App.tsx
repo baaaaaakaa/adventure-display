@@ -1,4 +1,5 @@
-import { useMemo } from 'react'
+import { Fragment, useMemo } from 'react'
+import { AppTooltipLayer } from './components/AppTooltipLayer'
 import { GmWindow } from './windows/gm/GmWindow'
 import { PlayerWindow } from './windows/player/PlayerWindow'
 
@@ -8,7 +9,12 @@ function App() {
     return searchParams.get('window') === 'player'
   }, [])
 
-  return isPlayerWindow ? <PlayerWindow /> : <GmWindow />
+  return (
+    <Fragment>
+      {isPlayerWindow ? <PlayerWindow /> : <GmWindow />}
+      <AppTooltipLayer />
+    </Fragment>
+  )
 }
 
 export default App

@@ -1,0 +1,44 @@
+.titleRow {
+  align-items: center;
+  gap: 6px;
+  min-height: 22px;
+}
+
+.titleRow :global(.eyebrow) {
+  line-height: 1.2;
+}
+
+.deleteButton {
+  width: 22px;
+  min-width: 22px;
+  height: 22px;
+  min-height: 22px;
+  border-radius: 6px;
+  color: #8f4a2b;
+}
+
+.deleteButton i {
+  font-size: 0.72rem;
+}
+
+.orderField {
+  width: max-content;
+}
+
+.orderRow {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.orderRow input[type='number'] {
+  width: 84px;
+  min-width: 84px;
+}
+
+.orderRow :global(.token-modal-icon-button) {
+  width: 34px;
+  min-width: 34px;
+  height: 34px;
+  min-height: 34px;
+}

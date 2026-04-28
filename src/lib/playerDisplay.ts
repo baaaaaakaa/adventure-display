@@ -1,6 +1,8 @@
+import { defaultMapGrid, tokenSpaceValues } from '../types/adventure'
 import type {
   Adventure,
   AdventureScene,
+  MapGridSettings,
   MapLayerInstance,
   MapViewport,
   ProjectState,
@@ -211,6 +213,22 @@ function normalizeAdventure(adventure: Adventure): Adventure {
       assetId: track.assetId ?? null,
       src: track.src ?? '',
     })),
+    characters: (repairedAdventure.characters ?? []).map((character) => ({
+      ...character,
+      avatarAssetId: character.avatarAssetId ?? null,
+      avatarSrc: character.avatarSrc ?? null,
+      source: character.source ?? '',
+      importedAt: character.importedAt ?? new Date().toISOString(),
+      attacksAndSpellsText: character.attacksAndSpellsText ?? '',
+      attackFeaturesText: character.attackFeaturesText ?? '',
+      otherProficienciesAndLanguages: character.otherProficienciesAndLanguages ?? '',
+      spellcasting: {
+        ...character.spellcasting,
+        slots: character.spellcasting?.slots ?? [],
+        knownSpells: character.spellcasting?.knownSpells ?? [],
+        spells: character.spellcasting?.spells ?? [],
+      },
+    })),
     scenes: (repairedAdventure.scenes ?? []).map((scene) => ({
       ...scene,
       splash: {
@@ -264,13 +282,29 @@ function createDefaultMapViewport(): MapViewport {
   }
 }
 
+function normalizeMapGrid(value?: Partial<MapGridSettings> | null): MapGridSettings {
+  const columns =
+    typeof value?.columns === 'number'
+      ? Math.max(4, Math.min(64, Math.round(value.columns)))
+      : defaultMapGrid.columns
+  const rows =
+    typeof value?.rows === 'number'
+      ? Math.max(4, Math.min(64, Math.round(value.rows)))
+      : defaultMapGrid.rows
+
+  return { columns, rows }
+}
+
 function createBaseMapLayer(scene: AdventureScene): MapLayerInstance {
   return {
     id: `${scene.id}-base-layer`,
     title: scene.map.title || 'Базовая карта',
     imageSrc: scene.map.imageSrc ?? null,
+    isActive: true,
     visibleToGm: true,
     visibleToPlayers: true,
+    scale: 1,
+    rotation: 0,
   }
 }
 
@@ -282,6 +316,9 @@ function createInitialSceneRuntimeState(scene: AdventureScene): SceneRuntimeStat
     activeInitiativeTokenId: null,
     serviceMarkers: [],
     fogCells: [],
+    hiddenZoneIds: [],
+    mapGrid: normalizeMapGrid(),
+    mapGridVisible: true,
     mapViewport: createDefaultMapViewport(),
   }
 }
@@ -299,6 +336,24 @@ function sortTokensByInitiative(tokens: TokenInstance[]) {
 
     return left.name.localeCompare(right.name, 'ru')
   })
+}
+
+function normalizeTokenSpace(token: Partial<TokenInstance> & { size?: number }) {
+  if (typeof token.space === 'string' && tokenSpaceValues.includes(token.space as typeof tokenSpaceValues[number])) {
+    return token.space
+  }
+
+  if (typeof token.size === 'number') {
+    if (token.size >= 104) {
+      return 'huge'
+    }
+
+    if (token.size >= 80) {
+      return 'large'
+    }
+  }
+
+  return 'medium'
 }
 
 function syncSceneRuntimeStateWithScene(
@@ -324,7 +379,36 @@ function syncSceneRuntimeStateWithScene(
       null,
     visibleToGm: firstLayer?.visibleToGm ?? true,
     visibleToPlayers: firstLayer?.visibleToPlayers ?? true,
+    isActive: firstLayer?.isActive ?? true,
+    scale:
+      typeof firstLayer?.scale === 'number' && Number.isFinite(firstLayer.scale)
+        ? Math.max(0.1, firstLayer.scale)
+        : 1,
+    rotation:
+      typeof firstLayer?.rotation === 'number' && Number.isFinite(firstLayer.rotation)
+        ? firstLayer.rotation
+        : 0,
   }
+
+  const normalizedOtherLayers = otherLayers.map((layer) => ({
+    ...layer,
+    isActive: layer?.isActive ?? false,
+    scale:
+      typeof layer?.scale === 'number' && Number.isFinite(layer.scale)
+        ? Math.max(0.1, layer.scale)
+        : 1,
+    rotation:
+      typeof layer?.rotation === 'number' && Number.isFinite(layer.rotation)
+        ? layer.rotation
+        : 0,
+  }))
+
+  const normalizedLayers = [baseLayer, ...normalizedOtherLayers]
+  const activeLayerIndex = normalizedLayers.findIndex((layer) => layer.isActive)
+  const normalizedActiveLayers = normalizedLayers.map((layer, index) => ({
+    ...layer,
+    isActive: activeLayerIndex >= 0 ? index === activeLayerIndex : index === 0,
+  }))
 
   const normalizedTokens: TokenInstance[] = (nextState.tokens ?? []).map(
     (token, index) => ({
@@ -333,7 +417,9 @@ function syncSceneRuntimeStateWithScene(
         scene.monsterBlocks?.some((monster) => monster.id === token.linkedMonsterId)
           ? token.linkedMonsterId
           : null,
+      linkedCharacterId: token.linkedCharacterId ?? null,
       groupLabel: token.groupLabel ?? null,
+      space: normalizeTokenSpace(token),
       rotation: typeof token.rotation === 'number' ? token.rotation : 0,
       hiddenFromPlayers: token.hiddenFromPlayers ?? false,
       hitPointsCurrent:
@@ -347,6 +433,14 @@ function syncSceneRuntimeStateWithScene(
     nextState.serviceMarkers ?? []
   ).map((marker, index) => ({
     ...marker,
+    linkedHandoutId:
+      scene.handouts?.some((handout) => handout.id === marker.linkedHandoutId)
+        ? marker.linkedHandoutId
+        : null,
+    linkedCheckId:
+      scene.checksClues?.some((entry) => entry.id === marker.linkedCheckId)
+        ? marker.linkedCheckId
+        : null,
     zIndex: marker.zIndex ?? 100 + index,
   }))
   const initiativeTokens = sortTokensByInitiative(normalizedTokens)
@@ -358,11 +452,14 @@ function syncSceneRuntimeStateWithScene(
 
   return {
     mapImageSrc: baseLayer.imageSrc,
-    mapLayers: [baseLayer, ...otherLayers],
+    mapLayers: normalizedActiveLayers,
     tokens: normalizedTokens,
     activeInitiativeTokenId,
     serviceMarkers: normalizedServiceMarkers,
     fogCells: nextState.fogCells ?? [],
+    hiddenZoneIds: (nextState.hiddenZoneIds ?? []).filter((zoneId) => scene.zones.some((zone) => zone.id === zoneId)),
+    mapGrid: normalizeMapGrid(nextState.mapGrid),
+    mapGridVisible: nextState.mapGridVisible ?? true,
     mapViewport: {
       ...createDefaultMapViewport(),
       ...(nextState.mapViewport ?? {}),
@@ -402,6 +499,7 @@ export function createInitialProjectState(adventure: Adventure): ProjectState {
     sessions: {
       [safeAdventure.id]: createInitialSessionState(safeAdventure),
     },
+    monsterLibrary: [],
   }
 }
 
@@ -492,6 +590,13 @@ export function syncProjectState(currentState: ProjectState): ProjectState {
       ]),
     ),
     sessions,
+    monsterLibrary: Array.isArray(currentState.monsterLibrary)
+      ? currentState.monsterLibrary.map((monster) => ({
+          ...monster,
+          imageAssetId: monster.imageAssetId ?? null,
+          imageSrc: monster.imageSrc ?? null,
+        }))
+      : [],
   }
 }
 
@@ -536,6 +641,7 @@ export function loadProjectState(fallback: ProjectState): ProjectState {
         sessions: {
           [parsed.adventure.id]: parsed.session,
         },
+        monsterLibrary: [],
       })
     }
 
@@ -546,5 +652,15 @@ export function loadProjectState(fallback: ProjectState): ProjectState {
 }
 
 export function saveProjectState(state: ProjectState) {
-  window.localStorage.setItem(projectStateStorageKey, JSON.stringify(state))
+  try {
+    window.localStorage.setItem(projectStateStorageKey, JSON.stringify(state))
+  } catch (error) {
+    if (error instanceof DOMException && error.name === 'QuotaExceededError') {
+      throw new Error(
+        'Недостаточно места в хранилище браузера. Уменьши размер загружаемых изображений или замени слишком большие карты.',
+      )
+    }
+
+    throw error
+  }
 }

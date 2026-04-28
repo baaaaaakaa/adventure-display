@@ -1,0 +1,216 @@
+.tracker {
+  position: absolute;
+  top: 16px;
+  left: 50%;
+  z-index: 14;
+  transform: translateX(-50%);
+  width: clamp(340px, calc(100% - 120px), 760px);
+  display: grid;
+  gap: 6px;
+  justify-items: stretch;
+  padding: 0;
+  border-radius: 18px;
+  background: transparent;
+  border: 0;
+  color: rgba(255, 246, 234, 0.96);
+  box-shadow: none;
+  backdrop-filter: none;
+  pointer-events: auto;
+}
+
+.main {
+  width: 100%;
+  display: grid;
+  grid-template-columns: 24px minmax(0, max-content) 24px;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+}
+
+.strip {
+  width: auto;
+  max-width: 100%;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 3px;
+  overflow: visible;
+  padding: 1px;
+  scrollbar-width: none;
+}
+
+.strip::-webkit-scrollbar {
+  display: none;
+}
+
+.token {
+  position: relative;
+  display: inline-flex;
+  align-items: stretch;
+  justify-content: center;
+  width: 40px;
+  min-width: 40px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  transition:
+    transform 120ms ease,
+    filter 120ms ease;
+}
+
+.token:hover,
+.token:focus-visible {
+  transform: translateY(-1px);
+  filter: brightness(1.05);
+}
+
+.nav {
+  width: 24px;
+  min-width: 24px;
+  height: 28px;
+  min-height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: rgba(255, 246, 234, 0.92);
+  box-shadow: none;
+}
+
+.nav:hover,
+.nav:focus-visible {
+  background: transparent;
+  color: #fffaf0;
+}
+
+.avatar {
+  position: relative;
+  width: 40px;
+  height: 40px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 10px;
+  overflow: hidden;
+  background:
+    linear-gradient(180deg, rgba(123, 90, 62, 0.92) 0%, rgba(69, 45, 28, 0.98) 100%);
+  border: 2px solid rgba(255, 225, 179, 0.16);
+  color: rgba(255, 246, 234, 0.92);
+  font-family: 'Georgia', 'Times New Roman', serif;
+  font-size: 1.05rem;
+  font-weight: 700;
+  line-height: 1;
+  box-shadow:
+    0 4px 10px rgba(0, 0, 0, 0.24),
+    inset 0 1px 0 rgba(255, 241, 217, 0.12);
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: cover;
+  transition:
+    border-color 120ms ease,
+    box-shadow 120ms ease,
+    transform 120ms ease;
+}
+
+.avatarPlayer {
+  border-color: #d2e7ff;
+}
+
+.avatarMonster {
+  border-color: #ffbea8;
+}
+
+.avatarNpc {
+  border-color: #d6efc7;
+}
+
+.hasImage::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(17, 10, 6, 0.04) 0%, rgba(17, 10, 6, 0.28) 100%);
+}
+
+.hidden::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: rgba(24, 14, 8, 0.48);
+  z-index: 1;
+}
+
+.hidden.hasImage::after,
+.hidden span {
+  z-index: 2;
+}
+
+.tokenActive .avatar {
+  box-shadow:
+    0 0 0 2px rgba(240, 204, 126, 0.34),
+    0 0 14px rgba(240, 204, 126, 0.34),
+    0 6px 14px rgba(0, 0, 0, 0.28);
+  transform: translateY(-1px);
+}
+
+.more {
+  align-self: center;
+  min-width: 30px;
+  height: 26px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 8px;
+  border-radius: 999px;
+  background: rgba(255, 250, 240, 0.08);
+  color: rgba(255, 246, 234, 0.72);
+  font-size: 0.72rem;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.caption {
+  width: 100%;
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 6px;
+  text-align: center;
+  pointer-events: none;
+}
+
+.name {
+  max-width: 100%;
+  overflow: hidden;
+  color: rgba(255, 244, 230, 0.98);
+  font-family: 'Georgia', 'Times New Roman', serif;
+  font-size: 0.94rem;
+  font-weight: 700;
+  line-height: 1.1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-shadow: 0 1px 10px rgba(0, 0, 0, 0.45);
+}
+
+.divider {
+  color: rgba(240, 223, 196, 0.56);
+  font-size: 0.76rem;
+  line-height: 1;
+}
+
+.meta {
+  max-width: 42%;
+  overflow: hidden;
+  color: rgba(240, 223, 196, 0.76);
+  font-size: 0.61rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+  white-space: nowrap;
+}

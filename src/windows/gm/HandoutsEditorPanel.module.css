@@ -1,0 +1,112 @@
+.list {
+  display: grid;
+  gap: 10px;
+}
+
+.spoiler {
+  display: grid;
+  gap: 8px;
+}
+
+.spoilerSummary {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 8px;
+  min-height: 34px;
+  padding-left: var(--modal-content-inset);
+  cursor: pointer;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+  font-size: 0.75rem;
+  font-weight: 700;
+  line-height: 1.2;
+  list-style: none;
+}
+
+.spoilerSummary::-webkit-details-marker {
+  display: none;
+}
+
+.spoilerCount {
+  min-width: 22px;
+  height: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: rgba(58, 43, 31, 0.08);
+  color: var(--text-muted);
+  font-size: 0.68rem;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.spoilerSummary i {
+  font-size: 0.72rem;
+  transition: transform 140ms ease;
+}
+
+.spoiler[open] .spoilerSummary i {
+  transform: rotate(180deg);
+}
+
+.spoiler .list {
+  padding-top: 2px;
+}
+
+.empty {
+  padding-left: var(--modal-content-inset);
+}
+
+.card {
+  text-align: left;
+  display: grid;
+  gap: 4px;
+  padding: 12px 14px;
+  border-radius: 18px;
+  border: 1px solid rgba(58, 43, 31, 0.12);
+  background: rgba(255, 255, 255, 0.66);
+}
+
+.card:hover {
+  border-color: rgba(174, 123, 51, 0.28);
+  background: rgba(255, 255, 255, 0.86);
+}
+
+.active {
+  border-color: rgba(46, 122, 120, 0.28);
+  background: rgba(255, 255, 255, 0.9);
+}
+
+.card strong {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.editor {
+  display: grid;
+  gap: 12px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(58, 43, 31, 0.1);
+}
+
+:global(.scene-editor-panel.is-modal-open) .list {
+  gap: 8px;
+}
+
+:global(.scene-editor-panel.is-modal-open) .card {
+  gap: 5px;
+  padding: 12px 13px;
+  border-radius: 16px;
+}
+
+:global(.scene-editor-panel.is-modal-open) .editor {
+  gap: 10px;
+  padding: 14px;
+  border-top: 0;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid rgba(58, 43, 31, 0.1);
+}

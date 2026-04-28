@@ -1,0 +1,179 @@
+import { StyledSelect } from '../../components/StyledSelect'
+import type { AdventureScene, ServiceMarker } from '../../types/adventure'
+import styles from './ServiceMarkerModal.module.css'
+
+type ServiceMarkerModalProps = {
+  activeScene: AdventureScene
+  marker: ServiceMarker
+  onClose: () => void
+  onRemoveMarker: (markerId: string) => void
+  onUpdateMarker: (
+    markerId: string,
+    updater: (marker: ServiceMarker) => ServiceMarker,
+  ) => void
+}
+
+export function ServiceMarkerModal({
+  activeScene,
+  marker,
+  onClose,
+  onRemoveMarker,
+  onUpdateMarker,
+}: ServiceMarkerModalProps) {
+  return (
+    <div
+      className="modal-backdrop"
+      onClick={onClose}
+      role="presentation"
+    >
+      <div
+        className="modal-dialog"
+        onClick={(event) => event.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+        aria-label="Редактор служебной отметки"
+      >
+        <div className="modal-header">
+          <div className="control-group-copy">
+            <div className={`scene-editor-panel-title-row ${styles.titleRow}`}>
+              <span className="eyebrow">Служебная отметка</span>
+              <button
+                aria-label="Удалить отметку"
+                className={`ghost-button compact-button token-modal-icon-button ${styles.deleteButton}`}
+                onClick={() => onRemoveMarker(marker.id)}
+                type="button"
+              >
+                <i aria-hidden="true" className="fa-solid fa-trash" />
+              </button>
+            </div>
+            <p className="editor-hint">
+              Измени подпись, заметку и порядок слоя для отметки на карте.
+            </p>
+          </div>
+          <button
+            aria-label="Закрыть"
+            className="ghost-button compact-button token-modal-icon-button"
+            onClick={onClose}
+            title="Закрыть"
+            type="button"
+          >
+            <i aria-hidden="true" className="fa-solid fa-xmark" />
+          </button>
+        </div>
+
+        <div className="editor-stack">
+          <label className="field">
+            <span>Подпись</span>
+            <input
+              onChange={(event) =>
+                onUpdateMarker(marker.id, (currentMarker) => ({
+                  ...currentMarker,
+                  label: event.target.value,
+                }))
+              }
+              value={marker.label}
+            />
+          </label>
+
+          <label className="field">
+            <span>Заметка</span>
+            <textarea
+              onChange={(event) =>
+                onUpdateMarker(marker.id, (currentMarker) => ({
+                  ...currentMarker,
+                  note: event.target.value,
+                }))
+              }
+              rows={4}
+              value={marker.note}
+            />
+          </label>
+
+          <label className="field">
+            <span>Связанная раздатка</span>
+            <StyledSelect
+              onChange={(event) =>
+                onUpdateMarker(marker.id, (currentMarker) => ({
+                  ...currentMarker,
+                  linkedHandoutId: event.target.value || null,
+                }))
+              }
+              value={marker.linkedHandoutId ?? ''}
+            >
+              <option value="">не привязана</option>
+              {activeScene.handouts.map((handout) => (
+                <option key={handout.id} value={handout.id}>
+                  {handout.title}
+                </option>
+              ))}
+            </StyledSelect>
+          </label>
+
+          <label className="field">
+            <span>Связанная проверка или улика</span>
+            <StyledSelect
+              onChange={(event) =>
+                onUpdateMarker(marker.id, (currentMarker) => ({
+                  ...currentMarker,
+                  linkedCheckId: event.target.value || null,
+                }))
+              }
+              value={marker.linkedCheckId ?? ''}
+            >
+              <option value="">не привязана</option>
+              {activeScene.checksClues.map((entry) => (
+                <option key={entry.id} value={entry.id}>
+                  {entry.ability || 'Без названия'} • {entry.difficulty || 'без сложности'}
+                </option>
+              ))}
+            </StyledSelect>
+          </label>
+
+          <label className={`field ${styles.orderField}`}>
+            <span>Порядок слоя</span>
+            <div className={styles.orderRow}>
+              <input
+                onChange={(event) =>
+                  onUpdateMarker(marker.id, (currentMarker) => ({
+                    ...currentMarker,
+                    zIndex: Number(event.target.value),
+                  }))
+                }
+                type="number"
+                value={marker.zIndex}
+              />
+              <button
+                aria-label="Поднять выше"
+                className="ghost-button compact-button token-modal-icon-button"
+                onClick={() =>
+                  onUpdateMarker(marker.id, (currentMarker) => ({
+                    ...currentMarker,
+                    zIndex: currentMarker.zIndex + 1,
+                  }))
+                }
+                title="Выше"
+                type="button"
+              >
+                <i aria-hidden="true" className="fa-solid fa-arrow-up" />
+              </button>
+              <button
+                aria-label="Опустить ниже"
+                className="ghost-button compact-button token-modal-icon-button"
+                onClick={() =>
+                  onUpdateMarker(marker.id, (currentMarker) => ({
+                    ...currentMarker,
+                    zIndex: currentMarker.zIndex - 1,
+                  }))
+                }
+                title="Ниже"
+                type="button"
+              >
+                <i aria-hidden="true" className="fa-solid fa-arrow-down" />
+              </button>
+            </div>
+          </label>
+        </div>
+      </div>
+    </div>
+  )
+}

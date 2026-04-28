@@ -1,0 +1,16 @@
+.dialog {
+  width: min(520px, 100%);
+  display: grid;
+  gap: 12px;
+}
+
+.dialog :global(.control-group-copy) {
+  gap: 6px;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}

@@ -6,6 +6,22 @@
 
 
 
+  lazy,
+
+
+
+
+
+
+
+  Suspense,
+
+
+
+
+
+
+
   startTransition,
 
 
@@ -38,6 +54,8 @@
 
 
 
+  type KeyboardEvent as ReactKeyboardEvent,
+
   type PointerEvent as ReactPointerEvent,
 
 
@@ -47,14 +65,27 @@
 
 
 } from 'react'
-
-
-
-
-
-
-
 import { sampleAdventure } from '../../data/sampleAdventure'
+import { StyledSelect } from '../../components/StyledSelect'
+import { AudioEditorPanel } from './AudioEditorPanel'
+import { ChecksEditorPanel } from './ChecksEditorPanel'
+import { GmNotesPanel } from './GmNotesPanel'
+import { HandoutsEditorPanel } from './HandoutsEditorPanel'
+import { InitiativeTracker } from './InitiativeTracker'
+import { MapCornerPanel } from './MapCornerPanel'
+import { MapGridModal } from './MapGridModal'
+import { MapLayersModal } from './MapLayersModal'
+import { MapParamsModal } from './MapParamsModal'
+import { MapTitleBadge } from './MapTitleBadge'
+import { MapUtilityPanel, type MapInteractionMode } from './MapUtilityPanel'
+import { ProjectReconnectModal } from './ProjectReconnectModal'
+import { SceneEditorActions, type EditorTab } from './SceneEditorActions'
+import { ServiceMarkerModal } from './ServiceMarkerModal'
+import { TokenModal } from './TokenModal'
+import { useProjectHistory } from './useProjectHistory'
+import { useProjectFolderPersistence } from './useProjectFolderPersistence'
+import { mapScaleStep, useMapViewportControls } from './useMapViewportControls'
+import { ZoneModal } from './ZoneModal'
 
 
 
@@ -63,13 +94,6 @@ import { sampleAdventure } from '../../data/sampleAdventure'
 
 
 import {
-
-
-
-
-
-
-
   createInitialProjectState,
 
 
@@ -94,7 +118,6 @@ import {
 
 
 
-  loadProjectState,
 
 
 
@@ -110,7 +133,6 @@ import {
 
 
 
-  saveProjectState,
 
 
 
@@ -127,14 +149,23 @@ import {
 
 
 } from '../../lib/playerDisplay'
-
-
-
-
-
-
-
-import { sceneAccentLabels, sceneAccentValues } from '../../types/adventure'
+import { collectProjectObjectUrls, revokeObjectUrls } from '../../lib/objectUrls'
+import { createPlayerCharacterFromLssJson } from '../../lib/lssCharacterImport'
+import {
+  loadBuiltInBestiarySummaries,
+  loadBuiltInMonsterDetail,
+  type MonsterSummary,
+} from '../../library/bestiary/bestiaryRepository'
+import { getMonsterImageRef } from '../../library/bestiary/monsterImages'
+import { loadBuiltInSpellLibrary } from '../../library/spells/spellRepository'
+import {
+  defaultMapGrid,
+  sceneAccentLabels,
+  sceneAccentValues,
+  tokenSpaceFootprints,
+  tokenSpaceLabels,
+  tokenSpaceValues,
+} from '../../types/adventure'
 
 
 
@@ -208,6 +239,8 @@ import type {
 
   CheckClueEntry,
 
+  MapGridSettings,
+
 
 
 
@@ -248,6 +281,8 @@ import type {
 
   MonsterFeature,
 
+  PlayerCharacter,
+
 
 
 
@@ -255,6 +290,14 @@ import type {
 
 
   ProjectState,
+
+
+
+
+
+
+
+  SpellBlock,
 
 
 
@@ -312,6 +355,8 @@ import type {
 
   TokenKind,
 
+  TokenSpace,
+
 
 
 
@@ -319,6 +364,40 @@ import type {
 
 
 } from '../../types/adventure'
+
+const CharacterModal = lazy(() =>
+  import('./CharacterModal').then((module) => ({ default: module.CharacterModal })),
+)
+const SpellLibraryModal = lazy(() =>
+  import('./SpellLibraryModal').then((module) => ({ default: module.SpellLibraryModal })),
+)
+const BestiaryModal = lazy(() =>
+  import('./BestiaryModal').then((module) => ({ default: module.BestiaryModal })),
+)
+
+function LibraryLoadingModal({
+  error,
+  label,
+  onClose,
+}: {
+  error: string | null
+  label: string
+  onClose: () => void
+}) {
+  return (
+    <div className="modal-backdrop" onClick={onClose} role="presentation">
+      <section className="confirm-dialog" onClick={(event) => event.stopPropagation()} role="dialog" aria-modal="true">
+        <h3>{label}</h3>
+        <p>{error ?? 'Загружаю данные справочника...'}</p>
+        {error ? (
+          <button className="ghost-button compact-button" onClick={onClose} type="button">
+            Закрыть
+          </button>
+        ) : null}
+      </section>
+    </div>
+  )
+}
 
 
 
@@ -398,134 +477,6 @@ const playerWindowFeatures = [
 
 
 
-type EditorTab = 'scene' | 'handouts' | 'checks' | 'monsters' | 'audio'
-
-
-
-
-
-
-
-type MapInteractionMode =
-
-
-
-
-
-
-
-  | 'navigate'
-
-
-
-
-
-
-
-  | 'marker'
-
-
-
-
-
-
-
-  | 'token'
-
-
-
-
-
-
-
-  | 'zone'
-
-
-
-
-
-
-
-  | 'fog-draw'
-
-
-
-
-
-
-
-  | 'fog-erase'
-
-
-
-
-
-
-
-  | 'fog-area-draw'
-
-
-
-
-
-
-
-  | 'fog-area-erase'
-
-
-
-
-
-
-
-type ProjectSnapshotEntry = {
-
-
-
-
-
-
-
-  id: string
-
-
-
-
-
-
-
-  label: string
-
-
-
-
-
-
-
-  timestamp: string
-
-
-
-
-
-
-
-  state: ProjectState
-
-
-
-
-
-
-
-}
-
-
-
-
-
-
-
 type FogSelectionRect = {
 
 
@@ -568,6 +519,84 @@ type FogSelectionRect = {
 
 }
 
+function getElementRelativePercentPosition(element: HTMLDivElement, clientX: number, clientY: number) {
+  const rect = element.getBoundingClientRect()
+  const normalizedX = Math.min(0.9999, Math.max(0, (clientX - rect.left) / rect.width))
+  const normalizedY = Math.min(0.9999, Math.max(0, (clientY - rect.top) / rect.height))
+
+  return {
+    normalizedX,
+    normalizedY,
+    percentX: normalizedX * 100,
+    percentY: normalizedY * 100,
+  }
+}
+
+type ZoneSelectionRect = FogSelectionRect
+
+type ZoneResizeHandle = 'n' | 'e' | 's' | 'w' | 'ne' | 'nw' | 'se' | 'sw'
+
+function getZoneResizeHandle(zoneElement: HTMLDivElement, clientX: number, clientY: number): ZoneResizeHandle | null {
+  const rect = zoneElement.getBoundingClientRect()
+  const edgeThreshold = Math.max(8, Math.min(14, Math.min(rect.width, rect.height) * 0.18))
+  const nearLeft = clientX - rect.left <= edgeThreshold
+  const nearRight = rect.right - clientX <= edgeThreshold
+  const nearTop = clientY - rect.top <= edgeThreshold
+  const nearBottom = rect.bottom - clientY <= edgeThreshold
+
+  if (nearTop && nearLeft) {
+    return 'nw'
+  }
+
+  if (nearTop && nearRight) {
+    return 'ne'
+  }
+
+  if (nearBottom && nearLeft) {
+    return 'sw'
+  }
+
+  if (nearBottom && nearRight) {
+    return 'se'
+  }
+
+  if (nearTop) {
+    return 'n'
+  }
+
+  if (nearRight) {
+    return 'e'
+  }
+
+  if (nearBottom) {
+    return 's'
+  }
+
+  if (nearLeft) {
+    return 'w'
+  }
+
+  return null
+}
+
+function getZoneResizeCursor(handle: ZoneResizeHandle | null) {
+  switch (handle) {
+    case 'n':
+    case 's':
+      return 'ns-resize'
+    case 'e':
+    case 'w':
+      return 'ew-resize'
+    case 'ne':
+    case 'sw':
+      return 'nesw-resize'
+    case 'nw':
+    case 'se':
+      return 'nwse-resize'
+    default:
+      return 'grab'
+  }
+}
 
 
 
@@ -582,7 +611,17 @@ type FogSelectionRect = {
 
 
 
-const fogGridColumns = 24
+
+function normalizeMapGridValue(value: number, fallback: number) {
+  return Math.max(4, Math.min(64, Math.round(Number.isFinite(value) ? value : fallback)))
+}
+
+function normalizeMapGrid(mapGrid?: Partial<MapGridSettings> | null): MapGridSettings {
+  return {
+    columns: normalizeMapGridValue(mapGrid?.columns ?? defaultMapGrid.columns, defaultMapGrid.columns),
+    rows: normalizeMapGridValue(mapGrid?.rows ?? defaultMapGrid.rows, defaultMapGrid.rows),
+  }
+}
 
 
 
@@ -590,47 +629,9 @@ const fogGridColumns = 24
 
 
 
-const fogGridRows = 16
-
-
-
-
-
-
-
-const minMapScale = 0.5
-
-
-
-
-
-
-
-const maxMapScale = 2.5
-
-
-
-
-
-
-
-const mapScaleStep = 0.25
-
-
-
-
-
-
-
-const projectHistoryLimit = 40
-
-
-
-
-
-
-
-const projectSnapshotLimit = 18
+const tokenDragThreshold = 6
+const tokenRotateHoldDelay = 650
+const tokenRotateHoldMoveTolerance = 16
 
 
 
@@ -655,6 +656,8 @@ const editorTabLabels: Record<EditorTab, string> = {
 
 
   scene: 'Сцена',
+
+  splash: 'Сплеш',
 
 
 
@@ -990,7 +993,7 @@ function useBroadcastChannel() {
 
 
 
-  }, [])
+  })
 
 
 
@@ -1063,6 +1066,13 @@ function resolveMapBoardPosition(
 
 
   viewport: MapViewport,
+
+
+
+
+
+
+
 
 
 
@@ -1231,6 +1241,13 @@ function getNormalizedMapBoardPosition(
 
 
   viewport: MapViewport,
+
+
+
+
+
+
+
 
 
 
@@ -1430,6 +1447,14 @@ function getFogCellId(
 
 
 
+  mapGrid: MapGridSettings,
+
+
+
+
+
+
+
 ) {
 
 
@@ -1486,7 +1511,7 @@ function getFogCellId(
 
 
 
-  const column = Math.floor(normalizedX * fogGridColumns)
+  const column = Math.floor(normalizedX * mapGrid.columns)
 
 
 
@@ -1494,7 +1519,7 @@ function getFogCellId(
 
 
 
-  const row = Math.floor(normalizedY * fogGridRows)
+  const row = Math.floor(normalizedY * mapGrid.rows)
 
 
 
@@ -1567,6 +1592,7 @@ function getFogCellIdsForPercentBounds(
 
 
   bottomPercent: number,
+  mapGrid: MapGridSettings,
 
 
 
@@ -1614,7 +1640,7 @@ function getFogCellIdsForPercentBounds(
 
 
 
-  const startColumn = Math.max(0, Math.floor((minX / 100) * fogGridColumns))
+  const startColumn = Math.max(0, Math.floor((minX / 100) * mapGrid.columns))
 
 
 
@@ -1630,7 +1656,7 @@ function getFogCellIdsForPercentBounds(
 
 
 
-    fogGridColumns - 1,
+    mapGrid.columns - 1,
 
 
 
@@ -1638,7 +1664,7 @@ function getFogCellIdsForPercentBounds(
 
 
 
-    Math.floor((Math.max(minX, maxX - 0.0001) / 100) * fogGridColumns),
+    Math.floor((Math.max(minX, maxX - 0.0001) / 100) * mapGrid.columns),
 
 
 
@@ -1654,7 +1680,7 @@ function getFogCellIdsForPercentBounds(
 
 
 
-  const startRow = Math.max(0, Math.floor((minY / 100) * fogGridRows))
+  const startRow = Math.max(0, Math.floor((minY / 100) * mapGrid.rows))
 
 
 
@@ -1670,7 +1696,7 @@ function getFogCellIdsForPercentBounds(
 
 
 
-    fogGridRows - 1,
+    mapGrid.rows - 1,
 
 
 
@@ -1678,7 +1704,7 @@ function getFogCellIdsForPercentBounds(
 
 
 
-    Math.floor((Math.max(minY, maxY - 0.0001) / 100) * fogGridRows),
+    Math.floor((Math.max(minY, maxY - 0.0001) / 100) * mapGrid.rows),
 
 
 
@@ -1782,7 +1808,7 @@ function getFogCellIdsForPercentBounds(
 
 
 
-function getFogCellIdsForZone(zone: MapZone) {
+function getFogCellIdsForZone(zone: MapZone, mapGrid: MapGridSettings) {
 
 
 
@@ -1798,7 +1824,7 @@ function getFogCellIdsForZone(zone: MapZone) {
 
 
 
-    zone.x - zone.width / 2,
+    zone.x,
 
 
 
@@ -1806,7 +1832,7 @@ function getFogCellIdsForZone(zone: MapZone) {
 
 
 
-    zone.y - zone.height / 2,
+    zone.y,
 
 
 
@@ -1814,7 +1840,7 @@ function getFogCellIdsForZone(zone: MapZone) {
 
 
 
-    zone.x + zone.width / 2,
+    zone.x + zone.width,
 
 
 
@@ -1822,7 +1848,8 @@ function getFogCellIdsForZone(zone: MapZone) {
 
 
 
-    zone.y + zone.height / 2,
+    zone.y + zone.height,
+    mapGrid,
 
 
 
@@ -1854,7 +1881,7 @@ function getFogCellIdsForZone(zone: MapZone) {
 
 
 
-function getFogCellStyle(cellId: string) {
+function getFogCellStyle(cellId: string, mapGrid: MapGridSettings) {
 
 
 
@@ -1902,7 +1929,7 @@ function getFogCellStyle(cellId: string) {
 
 
 
-    left: `${(column / fogGridColumns) * 100}%`,
+    left: `${(column / mapGrid.columns) * 100}%`,
 
 
 
@@ -1910,7 +1937,7 @@ function getFogCellStyle(cellId: string) {
 
 
 
-    top: `${(row / fogGridRows) * 100}%`,
+    top: `${(row / mapGrid.rows) * 100}%`,
 
 
 
@@ -1918,7 +1945,7 @@ function getFogCellStyle(cellId: string) {
 
 
 
-    width: `${100 / fogGridColumns}%`,
+    width: `${100 / mapGrid.columns}%`,
 
 
 
@@ -1926,7 +1953,7 @@ function getFogCellStyle(cellId: string) {
 
 
 
-    height: `${100 / fogGridRows}%`,
+    height: `${100 / mapGrid.rows}%`,
 
 
 
@@ -1942,6 +1969,15 @@ function getFogCellStyle(cellId: string) {
 
 
 
+}
+
+function getZoneFogStyle(zone: Pick<MapZone, 'x' | 'y' | 'width' | 'height'>) {
+  return {
+    left: `${zone.x}%`,
+    top: `${zone.y}%`,
+    width: `${zone.width}%`,
+    height: `${zone.height}%`,
+  }
 }
 
 
@@ -2031,6 +2067,9 @@ function createBaseMapLayer(
 
 
     visibleToPlayers: true,
+    isActive: true,
+    scale: 1,
+    rotation: 0,
 
 
 
@@ -2039,38 +2078,6 @@ function createBaseMapLayer(
 
 
   }
-
-
-
-
-
-
-
-}
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-function clampMapScale(value: number) {
-
-
-
-
-
-
-
-  return Math.min(maxMapScale, Math.max(minMapScale, value))
 
 
 
@@ -2174,6 +2181,16 @@ function clampSpawnCount(value: number, fallback = 1) {
 
 
 
+}
+
+function normalizeRotationDegrees(value: number) {
+  const normalized = value % 360
+
+  return normalized < 0 ? normalized + 360 : normalized
+}
+
+function getTokenRotation(token: TokenInstance) {
+  return Number.isFinite(token.rotation) ? token.rotation : 0
 }
 
 
@@ -2398,22 +2415,6 @@ function sortTokensByInitiative(tokens: TokenInstance[]) {
 
 
 
-const bundledDeathHouseImportPath = '/adventures/dom-smerti-import-working.json'
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 function splitLines(value: string) {
 
 
@@ -2584,6 +2585,21 @@ function getAssetDataUrl(
 
 }
 
+function getAssetFileLabel(
+  assets: AssetRecord[],
+  assetId: string | null | undefined,
+  fallbackSrc: string | null | undefined,
+  emptyLabel = 'Файл не выбран',
+) {
+  const asset = assets.find((currentAsset) => currentAsset.id === assetId)
+
+  if (asset) {
+    return asset.originalName || asset.title
+  }
+
+  return fallbackSrc ? 'Файл загружен' : emptyLabel
+}
+
 
 
 
@@ -2679,166 +2695,6 @@ function createFallbackSceneSplash(
 
 
     imageSrc: null,
-
-
-
-
-
-
-
-  }
-
-
-
-
-
-
-
-}
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-function projectStatesEqual(left: ProjectState, right: ProjectState) {
-
-
-
-
-
-
-
-  return JSON.stringify(left) === JSON.stringify(right)
-
-
-
-
-
-
-
-}
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-function cloneProjectState(state: ProjectState): ProjectState {
-
-
-
-
-
-
-
-  return JSON.parse(JSON.stringify(state)) as ProjectState
-
-
-
-
-
-
-
-}
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-function createProjectSnapshot(
-
-
-
-
-
-
-
-  state: ProjectState,
-
-
-
-
-
-
-
-  label: string,
-
-
-
-
-
-
-
-): ProjectSnapshotEntry {
-
-
-
-
-
-
-
-  return {
-
-
-
-
-
-
-
-    id: createEntityId('snapshot'),
-
-
-
-
-
-
-
-    label,
-
-
-
-
-
-
-
-    timestamp: new Date().toISOString(),
-
-
-
-
-
-
-
-    state: cloneProjectState(state),
 
 
 
@@ -2981,6 +2837,16 @@ function isEditableEventTarget(target: EventTarget | null) {
 
 
 
+
+async function readBlobAsDataUrl(blob: Blob) {
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader()
+
+    reader.onload = () => resolve(String(reader.result))
+    reader.onerror = () => reject(reader.error)
+    reader.readAsDataURL(blob)
+  })
+}
 
 async function createAssetRecordFromFile(
 
@@ -4206,7 +4072,7 @@ function normalizeImportedAdventure(raw: unknown): Adventure {
 
 
 
-            `У ассета "${titleValue}" некорректный С‚ип "${kindValue}".`,
+            `У ассета "${titleValue}" некорректный тип "${kindValue}".`,
 
 
 
@@ -4406,7 +4272,7 @@ function normalizeImportedAdventure(raw: unknown): Adventure {
 
 
 
-          throw new Error(`Аудио‚ре #${index + 1} должен быть объектом.`)
+          throw new Error(`Аудиотрек #${index + 1} должен быть объектом.`)
 
 
 
@@ -5734,7 +5600,7 @@ function normalizeImportedAdventure(raw: unknown): Adventure {
 
 
 
-              `РС‚Р•Р– для с‚роки проверки/улики "${ability}"`,
+              `Итог для строки проверки/улики "${ability}"`,
 
 
 
@@ -6302,7 +6168,7 @@ function normalizeImportedAdventure(raw: unknown): Adventure {
 
 
 
-            `РРя монстра #${monsterIndex + 1} в сцене "${titleValue}"`,
+            `Имя монстра #${monsterIndex + 1} в сцене "${titleValue}"`,
 
 
 
@@ -6407,6 +6273,11 @@ function normalizeImportedAdventure(raw: unknown): Adventure {
 
 
             name: monsterName,
+            source: readOptionalString(monsterEntry, 'source') ?? '',
+            size: readOptionalString(monsterEntry, 'size') ?? '',
+            creatureType: readOptionalString(monsterEntry, 'creatureType') ?? '',
+            alignment: readOptionalString(monsterEntry, 'alignment') ?? '',
+            proficiencyBonus: readOptionalString(monsterEntry, 'proficiencyBonus') ?? '',
 
 
 
@@ -6414,7 +6285,7 @@ function normalizeImportedAdventure(raw: unknown): Adventure {
 
 
 
-            subtitle: readRequiredString(
+            subtitle: readOptionalString(monsterEntry, 'subtitle') ?? '',
 
 
 
@@ -6422,7 +6293,6 @@ function normalizeImportedAdventure(raw: unknown): Adventure {
 
 
 
-              monsterEntry,
 
 
 
@@ -6430,23 +6300,6 @@ function normalizeImportedAdventure(raw: unknown): Adventure {
 
 
 
-              'subtitle',
-
-
-
-
-
-
-
-              `Подзаголовок монстра "${monsterName}"`,
-
-
-
-
-
-
-
-            ),
 
 
 
@@ -6582,6 +6435,7 @@ function normalizeImportedAdventure(raw: unknown): Adventure {
 
 
 
+            hitPointsFormula: readOptionalString(monsterEntry, 'hitPointsFormula') ?? '',
             speed: readRequiredString(
 
 
@@ -6686,6 +6540,10 @@ function normalizeImportedAdventure(raw: unknown): Adventure {
 
 
 
+            damageVulnerabilities: readOptionalString(monsterEntry, 'damageVulnerabilities') ?? '',
+            damageResistances: readOptionalString(monsterEntry, 'damageResistances') ?? '',
+            damageImmunities: readOptionalString(monsterEntry, 'damageImmunities') ?? '',
+            conditionImmunities: readOptionalString(monsterEntry, 'conditionImmunities') ?? '',
             senses: readOptionalString(monsterEntry, 'senses') ?? '',
 
 
@@ -7199,13 +7057,6 @@ function normalizeImportedAdventure(raw: unknown): Adventure {
 
 
         ),
-
-
-
-
-
-
-
         title: readRequiredString(rawMap, 'title', `Название карты сцены "${titleValue}"`),
 
 
@@ -7423,6 +7274,7 @@ function normalizeImportedAdventure(raw: unknown): Adventure {
 
 
     audioLibrary,
+    characters: Array.isArray(raw.characters) ? (raw.characters as PlayerCharacter[]) : [],
 
 
 
@@ -7711,6 +7563,7 @@ function mergeImportedProjectIntoCurrent(
 
 
   const nextSessions = { ...currentState.sessions }
+  const nextMonsterLibrary = [...currentState.monsterLibrary]
 
 
 
@@ -7942,6 +7795,17 @@ function mergeImportedProjectIntoCurrent(
 
 
 
+  for (const importedMonster of importedState.monsterLibrary) {
+    nextMonsterLibrary.push({
+      ...importedMonster,
+      id: createUniqueCollectionId(
+        importedMonster.id || importedMonster.name,
+        nextMonsterLibrary.map((monster) => monster.id),
+        'monster',
+      ),
+  })
+}
+
   return syncProjectState({
 
 
@@ -7975,6 +7839,7 @@ function mergeImportedProjectIntoCurrent(
 
 
     sessions: nextSessions,
+    monsterLibrary: nextMonsterLibrary,
 
 
 
@@ -8071,6 +7936,7 @@ function createEmptyAdventure(adventureId: string): Adventure {
 
 
     audioLibrary: [],
+    characters: [],
 
 
 
@@ -8494,7 +8360,7 @@ const checkAbilityOptions = [
 
 
 
-  'Рн‚еллек‚',
+  'Интеллект',
 
 
 
@@ -8558,7 +8424,7 @@ const checkAbilityOptions = [
 
 
 
-  'Рс‚ория',
+  'История',
 
 
 
@@ -8590,7 +8456,7 @@ const checkAbilityOptions = [
 
 
 
-  'Уход за живо‚н‹ми',
+  'Уход за животными',
 
 
 
@@ -8694,7 +8560,7 @@ const checkAbilityOptions = [
 
 
 
-  'Спасбросок Рн‚еллек‚а',
+  'Спасбросок Интеллекта',
 
 
 
@@ -8718,7 +8584,7 @@ const checkAbilityOptions = [
 
 
 
-  'Рнс‚румен‚С‹ вора',
+  'Инструменты вора',
 
 
 
@@ -8862,7 +8728,6 @@ const checkDifficultyOptions = [
 
 
 
-const tokenKindLabels: Record<TokenKind, string> = {
 
 
 
@@ -8870,93 +8735,83 @@ const tokenKindLabels: Record<TokenKind, string> = {
 
 
 
-  player: 'Ргрок',
 
 
+const monsterSizeOptions = [
+  'Крошечный',
+  'Маленький',
+  'Средний',
+  'Большой',
+  'Огромный',
+  'Гигантский',
+] as const
 
+const monsterAlignmentOptions = [
+  '',
+  'ЗД',
+  'НД',
+  'ХД',
+  'ЗН',
+  'Н',
+  'ХН',
+  'ЗЗ',
+  'НЗ',
+  'ХЗ',
+  'любое мировоззрение',
+  'без мировоззрения',
+] as const
 
+const monsterChallengeOptions = [
+  '0 (10 опыта)',
+  '1/8 (25 опыта)',
+  '1/4 (50 опыта)',
+  '1/2 (100 опыта)',
+  '1 (200 опыта)',
+  '2 (450 опыта)',
+  '3 (700 опыта)',
+  '4 (1 100 опыта)',
+  '5 (1 800 опыта)',
+  '6 (2 300 опыта)',
+  '7 (2 900 опыта)',
+  '8 (3 900 опыта)',
+  '9 (5 000 опыта)',
+  '10 (5 900 опыта)',
+  '11 (7 200 опыта)',
+  '12 (8 400 опыта)',
+  '13 (10 000 опыта)',
+  '14 (11 500 опыта)',
+  '15 (13 000 опыта)',
+  '16 (15 000 опыта)',
+  '17 (18 000 опыта)',
+  '18 (20 000 опыта)',
+  '19 (22 000 опыта)',
+  '20 (25 000 опыта)',
+  '21 (33 000 опыта)',
+  '22 (41 000 опыта)',
+  '23 (50 000 опыта)',
+  '24 (62 000 опыта)',
+  '25 (75 000 опыта)',
+  '26 (90 000 опыта)',
+  '27 (105 000 опыта)',
+  '28 (120 000 опыта)',
+  '29 (135 000 опыта)',
+  '30 (155 000 опыта)',
+] as const
 
+function formatMonsterChallengeRating(challenge: number | string) {
+  const normalizedChallenge = String(challenge).trim()
+  const challengeAliases: Record<string, string> = {
+    '0.125': '1/8',
+    '0.25': '1/4',
+    '0.5': '1/2',
+  }
+  const challengeValue = challengeAliases[normalizedChallenge] ?? normalizedChallenge
 
-
-  monster: 'Монстр',
-
-
-
-
-
-
-
-  npc: 'NPC',
-
-
-
-
-
-
-
+  return (
+    monsterChallengeOptions.find((option) => option.startsWith(`${challengeValue} (`)) ??
+    challengeValue
+  )
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-const audioKindLabels: Record<AudioTrackKind, string> = {
-
-
-
-
-
-
-
-  music: 'Музыка',
-
-
-
-
-
-
-
-  ambience: 'Атмосфера',
-
-
-
-
-
-
-
-  sfx: 'Эффект',
-
-
-
-
-
-
-
-}
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 function createDefaultMonsterBlock(): MonsterBlock {
 
@@ -8990,7 +8845,12 @@ function createDefaultMonsterBlock(): MonsterBlock {
 
 
 
-    subtitle: 'Краткое описание, тип и мировоззрение',
+    subtitle: '',
+    source: '',
+    size: 'Средний',
+    creatureType: 'существо',
+    alignment: 'без мировоззрения',
+    proficiencyBonus: '+2',
 
 
 
@@ -9022,7 +8882,8 @@ function createDefaultMonsterBlock(): MonsterBlock {
 
 
 
-    speed: '30 фт.',
+    hitPointsFormula: '2d8 + 2',
+    speed: '30 С„С‚.',
 
 
 
@@ -9087,6 +8948,10 @@ function createDefaultMonsterBlock(): MonsterBlock {
 
 
     skills: '',
+    damageVulnerabilities: '',
+    damageResistances: '',
+    damageImmunities: '',
+    conditionImmunities: '',
 
 
 
@@ -9190,6 +9055,457 @@ function createDefaultMonsterBlock(): MonsterBlock {
 
 
 
+const foundrySizeLabels: Record<string, string> = {
+  tiny: 'Крошечный',
+  sm: 'Маленький',
+  small: 'Маленький',
+  med: 'Средний',
+  medium: 'Средний',
+  lg: 'Большой',
+  large: 'Большой',
+  huge: 'Огромный',
+  grg: 'Гигантский',
+  gargantuan: 'Гигантский',
+}
+
+const foundryCreatureTypeLabels: Record<string, string> = {
+  aberration: 'аберрация',
+  beast: 'зверь',
+  celestial: 'небожитель',
+  construct: 'конструкт',
+  dragon: 'дракон',
+  elemental: 'элементаль',
+  fey: 'фея',
+  fiend: 'исчадие',
+  giant: 'великан',
+  humanoid: 'гуманоид',
+  monstrosity: 'монстр',
+  ooze: 'слизь',
+  plant: 'растение',
+  undead: 'нежить',
+}
+
+const foundryMovementLabels: Record<string, string> = {
+  walk: 'ходьба',
+  burrow: 'копание',
+  climb: 'лазание',
+  fly: 'полет',
+  swim: 'плавание',
+}
+
+const foundrySenseLabels: Record<string, string> = {
+  blindsight: 'слепое зрение',
+  darkvision: 'темное зрение',
+  tremorsense: 'чувство вибрации',
+  truesight: 'истинное зрение',
+}
+
+const foundrySkillLabels: Record<string, string> = {
+  acr: 'Акробатика',
+  ani: 'Уход за животными',
+  arc: 'Магия',
+  ath: 'Атлетика',
+  dec: 'Обман',
+  his: 'История',
+  ins: 'Проницательность',
+  itm: 'Запугивание',
+  inv: 'Расследование',
+  med: 'Медицина',
+  nat: 'Природа',
+  prc: 'Внимательность',
+  prf: 'Выступление',
+  per: 'Убеждение',
+  rel: 'Религия',
+  slt: 'Ловкость рук',
+  ste: 'Скрытность',
+  sur: 'Выживание',
+}
+
+const foundrySkillAbilities: Record<string, 'str' | 'dex' | 'con' | 'int' | 'wis' | 'cha'> = {
+  acr: 'dex',
+  ani: 'wis',
+  arc: 'int',
+  ath: 'str',
+  dec: 'cha',
+  his: 'int',
+  ins: 'wis',
+  itm: 'cha',
+  inv: 'int',
+  med: 'wis',
+  nat: 'int',
+  prc: 'wis',
+  prf: 'cha',
+  per: 'cha',
+  rel: 'int',
+  slt: 'dex',
+  ste: 'dex',
+  sur: 'wis',
+}
+
+const foundryAbilityLabels: Record<string, string> = {
+  str: 'СИЛ',
+  dex: 'ЛОВ',
+  con: 'ТЕЛ',
+  int: 'ИНТ',
+  wis: 'МДР',
+  cha: 'ХАР',
+}
+
+const foundryDamageTypeLabels: Record<string, string> = {
+  acid: 'кислота',
+  bludgeoning: 'дробящий',
+  cold: 'холод',
+  fire: 'огонь',
+  force: 'силовое поле',
+  lightning: 'электричество',
+  necrotic: 'некротический',
+  piercing: 'колющий',
+  poison: 'яд',
+  psychic: 'психический',
+  radiant: 'излучение',
+  slashing: 'рубящий',
+  thunder: 'звук',
+}
+
+const foundryConditionLabels: Record<string, string> = {
+  blinded: 'ослепление',
+  charmed: 'очарование',
+  deafened: 'глухота',
+  exhaustion: 'истощение',
+  frightened: 'испуг',
+  grappled: 'захват',
+  incapacitated: 'недееспособность',
+  invisible: 'невидимость',
+  paralyzed: 'паралич',
+  petrified: 'окаменение',
+  poisoned: 'отравление',
+  prone: 'сбивание с ног',
+  restrained: 'опутывание',
+  stunned: 'ошеломление',
+  unconscious: 'бессознательность',
+}
+
+function readRecordField(source: Record<string, unknown>, field: string) {
+  const value = source[field]
+  return isRecord(value) ? value : null
+}
+
+function readNumberField(source: Record<string, unknown> | null, field: string, fallback = 0) {
+  if (!source) {
+    return fallback
+  }
+
+  const value = source[field]
+  const parsed = typeof value === 'number' ? value : Number(value)
+  return Number.isFinite(parsed) ? parsed : fallback
+}
+
+function formatSignedNumber(value: number) {
+  return value >= 0 ? `+${value}` : String(value)
+}
+
+function getAbilityModifier(score: number) {
+  return Math.floor((score - 10) / 2)
+}
+
+function getMonsterProficiencyBonus(challenge: number) {
+  return Math.max(2, Math.ceil((challenge + 7) / 4))
+}
+
+function normalizeFoundryString(value: unknown) {
+  return typeof value === 'string' ? value.trim() : ''
+}
+
+function cleanFoundryText(value: unknown) {
+  const rawValue = normalizeFoundryString(value)
+
+  if (!rawValue) {
+    return ''
+  }
+
+  const withFoundryLinks = rawValue
+    .replace(/@(?:UUID|Compendium)\[[^\]]+\]\{([^}]+)\}/g, '$1')
+    .replace(/\[\[\/r\s*([^\]]+)\]\]/g, '$1')
+
+  if (typeof document !== 'undefined') {
+    const template = document.createElement('template')
+    template.innerHTML = withFoundryLinks
+    return (template.content.textContent ?? '').replace(/\s+/g, ' ').trim()
+  }
+
+  return withFoundryLinks.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim()
+}
+
+function formatFoundryList(
+  value: unknown,
+  labels: Record<string, string>,
+  customValue: unknown,
+) {
+  const values = Array.isArray(value)
+    ? value.map((entry) => labels[String(entry)] ?? String(entry))
+    : []
+  const custom = cleanFoundryText(customValue)
+
+  return [...values, custom].filter(Boolean).join(', ')
+}
+
+function formatFoundryMovement(attributes: Record<string, unknown>) {
+  const movement = readRecordField(attributes, 'movement')
+
+  if (!movement) {
+    return ''
+  }
+
+  const units = normalizeFoundryString(movement.units) || 'ft'
+  const unitLabel = units === 'ft' ? 'фт.' : units
+  const entries = Object.entries(foundryMovementLabels)
+    .map(([key, label]) => {
+      const value = readNumberField(movement, key, 0)
+      return value > 0 ? `${label === 'ходьба' ? '' : `${label} `}${value} ${unitLabel}`.trim() : ''
+    })
+    .filter(Boolean)
+
+  if (movement.hover === true && entries.some((entry) => entry.includes('полет'))) {
+    entries.push('парение')
+  }
+
+  return entries.join(', ')
+}
+
+function formatFoundrySenses(attributes: Record<string, unknown>, skills: Record<string, unknown>, wisdom: number) {
+  const senses = readRecordField(attributes, 'senses')
+  const units = senses ? normalizeFoundryString(senses.units) || 'ft' : 'ft'
+  const unitLabel = units === 'ft' ? 'фт.' : units
+  const entries = senses
+    ? Object.entries(foundrySenseLabels)
+        .map(([key, label]) => {
+          const value = readNumberField(senses, key, 0)
+          return value > 0 ? `${label} ${value} ${unitLabel}` : ''
+        })
+        .filter(Boolean)
+    : []
+  const special = senses ? cleanFoundryText(senses.special) : ''
+  const perception = readRecordField(skills, 'prc')
+  const perceptionProficiency = readNumberField(perception, 'value', 0)
+  const passiveBonus = readNumberField(readRecordField(perception ?? {}, 'bonuses'), 'passive', 0)
+  const passive = 10 + getAbilityModifier(wisdom) + perceptionProficiency * 2 + passiveBonus
+
+  return [...entries, special, `пассивная Внимательность ${passive}`].filter(Boolean).join(', ')
+}
+
+function formatFoundrySkills(
+  skills: Record<string, unknown>,
+  abilityScores: Record<'str' | 'dex' | 'con' | 'int' | 'wis' | 'cha', number>,
+  proficiencyBonus: number,
+) {
+  return Object.entries(skills)
+    .map(([skillKey, rawSkill]) => {
+      if (!isRecord(rawSkill)) {
+        return ''
+      }
+
+      const proficiency = readNumberField(rawSkill, 'value', 0)
+      const bonus = readNumberField(readRecordField(rawSkill, 'bonuses'), 'check', 0)
+
+      if (proficiency <= 0 && bonus === 0) {
+        return ''
+      }
+
+      const ability = normalizeFoundryString(rawSkill.ability) || foundrySkillAbilities[skillKey]
+      const abilityScore = abilityScores[ability as keyof typeof abilityScores] ?? 10
+      const total = getAbilityModifier(abilityScore) + proficiency * proficiencyBonus + bonus
+
+      return `${foundrySkillLabels[skillKey] ?? skillKey} ${formatSignedNumber(total)}`
+    })
+    .filter(Boolean)
+    .join(', ')
+}
+
+function formatFoundrySavingThrows(
+  abilities: Record<string, unknown>,
+  abilityScores: Record<'str' | 'dex' | 'con' | 'int' | 'wis' | 'cha', number>,
+  proficiencyBonus: number,
+) {
+  return Object.entries(abilityScores)
+    .map(([abilityKey, score]) => {
+      const ability = readRecordField(abilities, abilityKey)
+      const proficiency = readNumberField(ability, 'proficient', 0)
+      const bonus = readNumberField(readRecordField(ability ?? {}, 'bonuses'), 'save', 0)
+
+      if (proficiency <= 0 && bonus === 0) {
+        return ''
+      }
+
+      const total = getAbilityModifier(score) + proficiency * proficiencyBonus + bonus
+      return `${foundryAbilityLabels[abilityKey] ?? abilityKey} ${formatSignedNumber(total)}`
+    })
+    .filter(Boolean)
+    .join(', ')
+}
+
+function createMonsterFeatureFromFoundryItem(item: Record<string, unknown>) {
+  const system = readRecordField(item, 'system')
+  const description = system ? readRecordField(system, 'description') : null
+  const body = description ? cleanFoundryText(description.value) : ''
+
+  return {
+    id: createEntityId('feature'),
+    title: normalizeFoundryString(item.name) || 'Особенность',
+    body,
+  }
+}
+
+async function createAssetRecordFromUrl(
+  url: string,
+  kind: AssetKind,
+  title: string,
+): Promise<AssetRecord> {
+  const response = await fetch(url)
+
+  if (!response.ok) {
+    throw new Error(`Не удалось загрузить изображение монстра: ${response.status}`)
+  }
+
+  const blob = await response.blob()
+  const urlPath = new URL(url, window.location.href).pathname
+  const originalName = decodeURIComponent(urlPath.split('/').filter(Boolean).at(-1) ?? `${title}.webp`)
+
+  return {
+    id: createEntityId('asset'),
+    title: title.trim() || originalName.replace(/\.[^/.]+$/, '') || 'Новый ассет',
+    kind,
+    mimeType: blob.type || (kind === 'audio' ? 'audio/*' : 'image/*'),
+    originalName,
+    dataUrl: await readBlobAsDataUrl(blob),
+  }
+}
+
+function getFoundryItemSection(item: Record<string, unknown>) {
+  const system = readRecordField(item, 'system')
+  const activation = system ? readRecordField(system, 'activation') : null
+  const activationType = activation ? normalizeFoundryString(activation.type) : ''
+  const itemType = normalizeFoundryString(item.type)
+
+  if (activationType === 'bonus') {
+    return 'bonusActions' as const
+  }
+
+  if (activationType === 'reaction') {
+    return 'reactions' as const
+  }
+
+  if (activationType === 'legendary') {
+    return 'legendaryActions' as const
+  }
+
+  if (activationType === 'action' || itemType === 'weapon' || itemType === 'spell') {
+    return 'actions' as const
+  }
+
+  return 'traits' as const
+}
+
+function createMonsterBlockFromFoundryActor(rawActor: unknown, existingIds: string[]): MonsterBlock {
+  if (!isRecord(rawActor)) {
+    throw new Error('JSON монстра должен содержать объект Foundry Actor.')
+  }
+
+  const system = readRecordField(rawActor, 'system')
+  const abilities = system ? readRecordField(system, 'abilities') : null
+  const attributes = system ? readRecordField(system, 'attributes') : null
+  const details = system ? readRecordField(system, 'details') : null
+  const traits = system ? readRecordField(system, 'traits') : null
+  const skills = system ? readRecordField(system, 'skills') : null
+
+  if (!system || !abilities || !attributes || !details || !traits) {
+    throw new Error('JSON монстра должен быть экспортом NPC из Foundry/dnd5e.')
+  }
+
+  const name = normalizeFoundryString(rawActor.name) || 'Импортированный монстр'
+  const type = readRecordField(details, 'type')
+  const hp = readRecordField(attributes, 'hp')
+  const ac = readRecordField(attributes, 'ac')
+  const challenge = readNumberField(details, 'cr', 0)
+  const abilityScores = {
+    str: readNumberField(readRecordField(abilities, 'str'), 'value', 10),
+    dex: readNumberField(readRecordField(abilities, 'dex'), 'value', 10),
+    con: readNumberField(readRecordField(abilities, 'con'), 'value', 10),
+    int: readNumberField(readRecordField(abilities, 'int'), 'value', 10),
+    wis: readNumberField(readRecordField(abilities, 'wis'), 'value', 10),
+    cha: readNumberField(readRecordField(abilities, 'cha'), 'value', 10),
+  }
+  const proficiencyBonus = getMonsterProficiencyBonus(challenge)
+  const size = foundrySizeLabels[normalizeFoundryString(traits.size)] ?? normalizeFoundryString(traits.size)
+  const creatureTypeValue = type
+    ? cleanFoundryText(type.custom) || foundryCreatureTypeLabels[normalizeFoundryString(type.value)] || normalizeFoundryString(type.value)
+    : ''
+  const subtype = type ? cleanFoundryText(type.subtype) : ''
+  const creatureType = [creatureTypeValue, subtype ? `(${subtype})` : ''].filter(Boolean).join(' ')
+  const alignment = cleanFoundryText(details.alignment)
+  const source = cleanFoundryText(details.source)
+  const subtitle = [size, creatureType, alignment].filter(Boolean).join(', ')
+  const armorClass = ac
+    ? String(ac.flat ?? ac.value ?? (10 + getAbilityModifier(abilityScores.dex)))
+    : String(10 + getAbilityModifier(abilityScores.dex))
+  const hitPointsValue = readNumberField(hp, 'max', readNumberField(hp, 'value', 0))
+  const hitPointsFormula = hp ? cleanFoundryText(hp.formula) : ''
+  const foundryItems = Array.isArray(rawActor.items) ? rawActor.items.filter(isRecord) : []
+  const featureSections = {
+    traits: [] as MonsterFeature[],
+    actions: [] as MonsterFeature[],
+    bonusActions: [] as MonsterFeature[],
+    reactions: [] as MonsterFeature[],
+    legendaryActions: [] as MonsterFeature[],
+  }
+
+  for (const item of foundryItems) {
+    featureSections[getFoundryItemSection(item)].push(createMonsterFeatureFromFoundryItem(item))
+  }
+
+  return {
+    id: createUniqueCollectionId(name, existingIds, 'monster'),
+    name,
+    subtitle: subtitle || 'Импортировано из Foundry',
+    source,
+    size,
+    creatureType,
+    alignment,
+    proficiencyBonus: formatSignedNumber(proficiencyBonus),
+    imageSrc: normalizeFoundryString(rawActor.img) || null,
+    armorClass,
+    hitPoints: hitPointsFormula ? `${hitPointsValue} (${hitPointsFormula})` : String(hitPointsValue || ''),
+    hitPointsFormula,
+    speed: formatFoundryMovement(attributes),
+    strength: abilityScores.str,
+    dexterity: abilityScores.dex,
+    constitution: abilityScores.con,
+    intelligence: abilityScores.int,
+    wisdom: abilityScores.wis,
+    charisma: abilityScores.cha,
+    savingThrows: formatFoundrySavingThrows(abilities, abilityScores, proficiencyBonus),
+    skills: skills ? formatFoundrySkills(skills, abilityScores, proficiencyBonus) : '',
+    damageVulnerabilities: traits.dv && isRecord(traits.dv)
+      ? formatFoundryList(traits.dv.value, foundryDamageTypeLabels, traits.dv.custom)
+      : '',
+    damageResistances: traits.dr && isRecord(traits.dr)
+      ? formatFoundryList(traits.dr.value, foundryDamageTypeLabels, traits.dr.custom)
+      : '',
+    damageImmunities: traits.di && isRecord(traits.di)
+      ? formatFoundryList(traits.di.value, foundryDamageTypeLabels, traits.di.custom)
+      : '',
+    conditionImmunities: traits.ci && isRecord(traits.ci)
+      ? formatFoundryList(traits.ci.value, foundryConditionLabels, traits.ci.custom)
+      : '',
+    senses: skills ? formatFoundrySenses(attributes, skills, abilityScores.wis) : '',
+    languages: traits.languages && isRecord(traits.languages)
+      ? formatFoundryList(traits.languages.value, {}, traits.languages.custom)
+      : '',
+    challenge: formatMonsterChallengeRating(challenge),
+    notes: cleanFoundryText(readRecordField(details, 'biography')?.value),
+    ...featureSections,
+  }
+}
+
 function createFallbackMonsterImage(name: string) {
 
 
@@ -9198,7 +9514,7 @@ function createFallbackMonsterImage(name: string) {
 
 
 
-  const label = (name.trim()[0] ?? 'М').toUpperCase()
+  const label = (name.trim()[0] ?? 'Рњ').toUpperCase()
 
 
 
@@ -9655,84 +9971,18 @@ function parseMonsterFeatures(
 
 
 export function GmWindow() {
-
-
-
-
-
-
-
-  const [projectState, setProjectState] = useState<ProjectState>(() =>
-
-
-
-
-
-
-
-    loadProjectState(createInitialProjectState(sampleAdventure)),
-
-
-
-
-
-
-
-  )
-
-
-
-
-
-
-
-  const [projectSnapshots, setProjectSnapshots] = useState<ProjectSnapshotEntry[]>(() => {
-
-
-
-
-
-
-
-    const initialState = loadProjectState(createInitialProjectState(sampleAdventure))
-
-
-
-
-
-
-
-    return [createProjectSnapshot(initialState, 'Старт проекта')]
-
-
-
-
-
-
-
-  })
-
-
-
-
-
-
-
-  const [undoStack, setUndoStack] = useState<ProjectState[]>([])
-
-
-
-
-
-
-
-  const [redoStack, setRedoStack] = useState<ProjectState[]>([])
-
-
-
-
-
-
+  const initialProjectState = createInitialProjectState(sampleAdventure)
+  const {
+    projectState,
+    projectSnapshots,
+    undoStack,
+    redoStack,
+    commitProjectState,
+    updateProjectState,
+    undoLastChange,
+    redoLastChange,
+    restoreProjectSnapshot,
+  } = useProjectHistory(initialProjectState)
 
   const [activeSceneId, setActiveSceneId] = useState(
 
@@ -9759,14 +10009,7 @@ export function GmWindow() {
 
 
   const [selectedHandoutId, setSelectedHandoutId] = useState<string | null>(null)
-
-
-
-
-
-
-
-  const [selectedCheckId, setSelectedCheckId] = useState<string | null>(null)
+  const [linkedCheckPreviewId, setLinkedCheckPreviewId] = useState<string | null>(null)
 
 
 
@@ -9775,6 +10018,16 @@ export function GmWindow() {
 
 
   const [selectedMonsterId, setSelectedMonsterId] = useState<string | null>(null)
+  const [selectedCharacterId, setSelectedCharacterId] = useState<string | null>(null)
+  const [isCharacterModalOpen, setIsCharacterModalOpen] = useState(false)
+  const [isSpellLibraryModalOpen, setIsSpellLibraryModalOpen] = useState(false)
+  const [isBestiaryModalOpen, setIsBestiaryModalOpen] = useState(false)
+  const [builtInSpellLibrary, setBuiltInSpellLibrary] = useState<SpellBlock[] | null>(null)
+  const [builtInBestiary, setBuiltInBestiary] = useState<MonsterSummary[] | null>(null)
+  const [spellLibraryLoadError, setSpellLibraryLoadError] = useState<string | null>(null)
+  const [bestiaryLoadError, setBestiaryLoadError] = useState<string | null>(null)
+  const [characterImportTargetId, setCharacterImportTargetId] = useState<string | null>(null)
+  const [pendingCharacterDeleteId, setPendingCharacterDeleteId] = useState<string | null>(null)
 
 
 
@@ -9815,8 +10068,13 @@ export function GmWindow() {
 
 
   const [collapsedMonsterIds, setCollapsedMonsterIds] = useState<string[]>([])
+  const [isMonsterListCollapsed, setIsMonsterListCollapsed] = useState(false)
+  const [isMonsterLibraryDropdownOpen, setIsMonsterLibraryDropdownOpen] = useState(false)
+  const [monsterLibrarySearch, setMonsterLibrarySearch] = useState('')
+  const [pendingMonsterLibraryDeleteId, setPendingMonsterLibraryDeleteId] = useState<string | null>(null)
 
   const [isLiveToolsCollapsed, setIsLiveToolsCollapsed] = useState(false)
+  const [isRecoveryPointsCollapsed, setIsRecoveryPointsCollapsed] = useState(true)
 
 
 
@@ -9833,6 +10091,10 @@ export function GmWindow() {
 
 
   const [activeEditorTab, setActiveEditorTab] = useState<EditorTab>('scene')
+  const [isSceneEditorModalOpen, setIsSceneEditorModalOpen] = useState(false)
+  const [isSceneEditorActionsOpen, setIsSceneEditorActionsOpen] = useState(false)
+  const [isInitiativeTrackerVisible, setIsInitiativeTrackerVisible] = useState(true)
+  const [isGmNotesVisible, setIsGmNotesVisible] = useState(false)
 
 
 
@@ -9856,9 +10118,40 @@ export function GmWindow() {
 
 
 
-  const [newLayerTitle, setNewLayerTitle] = useState('')
   const [isServiceMarkerModalOpen, setIsServiceMarkerModalOpen] = useState(false)
+  const [isMapParamsModalOpen, setIsMapParamsModalOpen] = useState(false)
+  const [isMapGridModalOpen, setIsMapGridModalOpen] = useState(false)
+  const [isMapLayersModalOpen, setIsMapLayersModalOpen] = useState(false)
   const [isTokenModalOpen, setIsTokenModalOpen] = useState(false)
+  const [isZoneModalOpen, setIsZoneModalOpen] = useState(false)
+  const [mapGridCellSize, setMapGridCellSize] = useState<number | null>(null)
+  const [openCompactZoneToolsZoneId, setOpenCompactZoneToolsZoneId] = useState<string | null>(null)
+  const [hoveredZoneResizeHandle, setHoveredZoneResizeHandle] = useState<{
+    zoneId: string
+    handle: ZoneResizeHandle | null
+  } | null>(null)
+
+  const [rotatingTokenId, setRotatingTokenId] = useState<string | null>(null)
+  const sceneEditorActionsRef = useRef<HTMLDivElement | null>(null)
+  const layerImageInputRef = useRef<HTMLInputElement | null>(null)
+  const zoneDragStartRef = useRef<{ x: number; y: number } | null>(null)
+  const zoneDragOffsetRef = useRef<{ x: number; y: number } | null>(null)
+  const zoneResizeStateRef = useRef<{
+    zoneId: string
+    handle: ZoneResizeHandle
+    startX: number
+    startY: number
+    zone: Pick<MapZone, 'x' | 'y' | 'width' | 'height'>
+  } | null>(null)
+  const suppressZoneClickRef = useRef(false)
+  const tokenDragStartRef = useRef<{ x: number; y: number } | null>(null)
+  const tokenPointerPositionRef = useRef<{ x: number; y: number } | null>(null)
+  const tokenRotateHoldTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const tokenInteractionModeRef = useRef<'move' | 'rotate'>('move')
+  const tokenRotationGestureRef = useRef<{ tokenId: string; angleOffset: number } | null>(null)
+  const suppressTokenClickRef = useRef(false)
+  const serviceMarkerDragStartRef = useRef<{ x: number; y: number } | null>(null)
+  const suppressServiceMarkerClickRef = useRef(false)
 
 
 
@@ -9874,39 +10167,6 @@ export function GmWindow() {
 
 
 
-  const [newServiceMarkerNote, setNewServiceMarkerNote] = useState('')
-
-
-
-
-
-
-
-  const [newTokenName, setNewTokenName] = useState('')
-
-
-
-
-
-
-
-  const [newTokenKind, setNewTokenKind] = useState<TokenKind>('monster')
-
-
-
-
-
-
-
-  const [newTokenCount, setNewTokenCount] = useState(1)
-
-
-
-
-
-
-
-  const [newTokenFile, setNewTokenFile] = useState<File | null>(null)
 
 
 
@@ -9915,6 +10175,7 @@ export function GmWindow() {
 
 
   const [newMonsterSpawnCount, setNewMonsterSpawnCount] = useState(1)
+  const [monsterSpawnCounts, setMonsterSpawnCounts] = useState<Record<string, number>>({})
 
 
 
@@ -9978,7 +10239,7 @@ export function GmWindow() {
 
 
 
-  const [isMapPanning, setIsMapPanning] = useState(false)
+  const [isServiceMarkerDragging, setIsServiceMarkerDragging] = useState(false)
 
 
 
@@ -9987,6 +10248,14 @@ export function GmWindow() {
 
 
   const [fogSelectionRect, setFogSelectionRect] = useState<FogSelectionRect | null>(null)
+  const [zoneSelectionRect, setZoneSelectionRect] = useState<ZoneSelectionRect | null>(null)
+  const [isSceneMenuOpen, setIsSceneMenuOpen] = useState(false)
+  const [isProjectActionsOpen, setIsProjectActionsOpen] = useState(false)
+  const [editingAdventureField, setEditingAdventureField] = useState<{
+    adventureId: string
+    field: 'id' | 'title'
+  } | null>(null)
+  const [editingAdventureValue, setEditingAdventureValue] = useState('')
 
 
 
@@ -10020,6 +10289,24 @@ export function GmWindow() {
 
   } | null>(null)
 
+  const {
+    projectDirectoryHandle,
+    isProjectFoldersSupported,
+    projectPersistenceStatus,
+    projectPersistenceMessage,
+    rememberedProjectDirectoryName,
+    isProjectReconnectModalOpen,
+    isProjectReconnectPending,
+    setIsProjectReconnectModalOpen,
+    handleOpenProjectFolder,
+    handleReconnectRememberedProjectDirectory,
+    handleSaveProjectFolder,
+  } = useProjectFolderPersistence({
+    projectState,
+    onProjectLoaded: applyLoadedProjectState,
+    setImportFeedback,
+  })
+
 
 
 
@@ -10027,12 +10314,183 @@ export function GmWindow() {
 
 
   const mapBoardRef = useRef<HTMLDivElement | null>(null)
+  const mapTransformLayerRef = useRef<HTMLDivElement | null>(null)
+  const projectActionsRef = useRef<HTMLDivElement | null>(null)
+  const projectObjectUrlsRef = useRef<Set<string>>(new Set())
 
+  useEffect(() => {
+    const nextObjectUrls = collectProjectObjectUrls(projectState)
+    const previousObjectUrls = projectObjectUrlsRef.current
 
+    revokeObjectUrls(
+      [...previousObjectUrls].filter((objectUrl) => !nextObjectUrls.has(objectUrl)),
+    )
+    projectObjectUrlsRef.current = nextObjectUrls
+  }, [projectState])
 
+  useEffect(() => {
+    return () => {
+      revokeObjectUrls(projectObjectUrlsRef.current)
+      projectObjectUrlsRef.current = new Set()
+    }
+  }, [])
 
+  useEffect(() => {
+    if (!isSpellLibraryModalOpen && !isCharacterModalOpen) {
+      return
+    }
 
+    let isCancelled = false
 
+    setSpellLibraryLoadError(null)
+    loadBuiltInSpellLibrary()
+      .then((spells) => {
+        if (!isCancelled) {
+          setBuiltInSpellLibrary(spells)
+        }
+      })
+      .catch((error: unknown) => {
+        if (!isCancelled) {
+          setSpellLibraryLoadError(error instanceof Error ? error.message : 'Не удалось загрузить библиотеку заклинаний.')
+        }
+      })
+
+    return () => {
+      isCancelled = true
+    }
+  }, [isCharacterModalOpen, isSpellLibraryModalOpen])
+
+  useEffect(() => {
+    if (!isBestiaryModalOpen) {
+      return
+    }
+
+    let isCancelled = false
+
+    setBestiaryLoadError(null)
+    loadBuiltInBestiarySummaries()
+      .then((monsters) => {
+        if (!isCancelled) {
+          setBuiltInBestiary(monsters)
+        }
+      })
+      .catch((error: unknown) => {
+        if (!isCancelled) {
+          setBestiaryLoadError(error instanceof Error ? error.message : 'Не удалось загрузить бестиарий.')
+        }
+      })
+
+    return () => {
+      isCancelled = true
+    }
+  }, [isBestiaryModalOpen])
+useEffect(() => {
+    if (!isSceneMenuOpen && !isProjectActionsOpen) {
+      return
+    }
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        if (isProjectActionsOpen) {
+          setIsProjectActionsOpen(false)
+          return
+        }
+        setIsSceneMenuOpen(false)
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [isProjectActionsOpen, isSceneMenuOpen])
+
+  useEffect(() => {
+    if (!isProjectActionsOpen) {
+      return
+    }
+
+    const handlePointerDown = (event: PointerEvent) => {
+      const target = event.target
+
+      if (target instanceof Node && projectActionsRef.current?.contains(target)) {
+        return
+      }
+
+      setIsProjectActionsOpen(false)
+    }
+
+    window.addEventListener('pointerdown', handlePointerDown)
+
+    return () => {
+      window.removeEventListener('pointerdown', handlePointerDown)
+    }
+  }, [isProjectActionsOpen])
+
+  useEffect(() => {
+    if (!isSceneMenuOpen) {
+      // Keep dependent flyouts/edit fields closed when the scene drawer closes.
+       
+      setIsProjectActionsOpen(false)
+      setEditingAdventureField(null)
+      setEditingAdventureValue('')
+    }
+  }, [isSceneMenuOpen])
+
+  useEffect(() => {
+    if (!isSceneEditorActionsOpen) {
+      return
+    }
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setIsSceneEditorActionsOpen(false)
+      }
+    }
+
+    const handlePointerDown = (event: PointerEvent) => {
+      const target = event.target
+
+      if (target instanceof Node && sceneEditorActionsRef.current?.contains(target)) {
+        return
+      }
+
+      setIsSceneEditorActionsOpen(false)
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    window.addEventListener('pointerdown', handlePointerDown)
+
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown)
+      window.removeEventListener('pointerdown', handlePointerDown)
+    }
+  }, [isSceneEditorActionsOpen])
+
+  useEffect(() => {
+    if (!isSceneEditorModalOpen) {
+      return
+    }
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setIsSceneEditorModalOpen(false)
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [isSceneEditorModalOpen])
+function openSceneEditorSection(tabId: EditorTab) {
+    setLinkedCheckPreviewId(null)
+    setActiveEditorTab(tabId)
+    setIsSceneEditorModalOpen(true)
+    setIsSceneEditorActionsOpen(false)
+  }
 
   const audioRef = useRef<HTMLAudioElement | null>(null)
 
@@ -10051,6 +10509,8 @@ export function GmWindow() {
 
 
   const projectImportFileInputRef = useRef<HTMLInputElement | null>(null)
+  const characterImportFileInputRef = useRef<HTMLInputElement | null>(null)
+  const monsterImportFileInputRef = useRef<HTMLInputElement | null>(null)
 
 
 
@@ -10059,22 +10519,7 @@ export function GmWindow() {
 
 
   const channelRef = useBroadcastChannel()
-
-
-
-
-
-
-
-  const projectStateRef = useRef(projectState)
-
-
-
-
-
-
-
-  const activeSceneStateRef = useRef<SceneRuntimeState | null>(null)
+const activeSceneStateRef = useRef<SceneRuntimeState | null>(null)
 
 
 
@@ -10115,13 +10560,6 @@ export function GmWindow() {
 
 
   const sessionState = activeBundle?.session ?? null
-
-
-
-
-
-
-
   const resolvedActiveSceneId =
 
 
@@ -10147,21 +10585,6 @@ export function GmWindow() {
 
 
       : (adventure?.scenes[0]?.id ?? '')
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
   useEffect(() => {
 
 
@@ -10170,39 +10593,6 @@ export function GmWindow() {
 
 
 
-    projectStateRef.current = projectState
-
-
-
-
-
-
-
-  }, [projectState])
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-  useEffect(() => {
-
-
-
-
-
-
-
-    saveProjectState(projectState)
 
 
 
@@ -10219,21 +10609,6 @@ export function GmWindow() {
 
 
   }, [channelRef, projectState])
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
   useEffect(() => {
 
 
@@ -10555,6 +10930,8 @@ export function GmWindow() {
 
 
     null
+  const linkedCheckPreviewEntry =
+    activeScene?.checksClues.find((entry) => entry.id === linkedCheckPreviewId) ?? null
 
 
 
@@ -10594,7 +10971,7 @@ export function GmWindow() {
 
 
 
-    : (activeScene?.handouts[0]?.id ?? null)
+    : null
 
 
 
@@ -10714,62 +11091,6 @@ export function GmWindow() {
 
 
 
-  const resolvedSelectedCheckId = activeScene?.checksClues.some(
-
-
-
-
-
-
-
-    (entry) => entry.id === selectedCheckId,
-
-
-
-
-
-
-
-  )
-
-
-
-
-
-
-
-    ? selectedCheckId
-
-
-
-
-
-
-
-    : (activeScene?.checksClues[0]?.id ?? null)
-
-
-
-
-
-
-
-  const activeCheckClue =
-
-
-
-
-
-
-
-    activeScene?.checksClues.find((entry) => entry.id === resolvedSelectedCheckId) ?? null
-
-
-
-
-
-
-
   const resolvedSelectedMonsterId = activeScene?.monsterBlocks.some(
 
 
@@ -10841,6 +11162,15 @@ export function GmWindow() {
 
 
 
+
+  const resolvedSelectedCharacterId = adventure?.characters.some(
+    (character) => character.id === selectedCharacterId,
+  )
+    ? selectedCharacterId
+    : (adventure?.characters[0]?.id ?? null)
+
+  const activeCharacter =
+    adventure?.characters.find((character) => character.id === resolvedSelectedCharacterId) ?? null
 
   const isActiveMonsterCollapsed = activeMonster
 
@@ -10922,6 +11252,10 @@ export function GmWindow() {
 
 
 
+  const currentPlayerDisplay = sessionState?.playerDisplay ?? null
+  const currentPlayerSceneId = currentPlayerDisplay?.sceneId ?? null
+  const currentPlayerMode = currentPlayerDisplay?.mode ?? 'standby'
+  const currentPlayerHandoutId = currentPlayerDisplay?.activeHandoutId ?? null
   const currentPlayerSplash = currentPlayerScene?.splash ?? null
 
 
@@ -11130,6 +11464,11 @@ export function GmWindow() {
 
 
 
+  const activeTokenLinkedCharacter =
+    activeToken?.linkedCharacterId && adventure
+      ? adventure.characters.find((character) => character.id === activeToken.linkedCharacterId) ?? null
+      : null
+
   const activeLayer =
 
 
@@ -11137,6 +11476,8 @@ export function GmWindow() {
 
 
 
+
+    activeSceneState?.mapLayers.find((layer) => layer.isActive) ??
 
     activeSceneState?.mapLayers.find((layer) => layer.id === selectedLayerId) ??
 
@@ -11161,6 +11502,8 @@ export function GmWindow() {
 
 
 
+
+  const quickMapLayer = activeSceneState?.mapLayers.find((layer) => layer.isActive) ?? activeLayer
 
   const activeServiceMarker =
 
@@ -11220,101 +11563,29 @@ export function GmWindow() {
 
     null
 
+  const quickSceneHandout = activeScene ? getQuickSceneHandout(activeScene) : null
+  const isPlayerShowingActiveMap =
+    currentPlayerMode === 'map' && currentPlayerSceneId === activeScene?.id
+  const isPlayerShowingActiveSplash =
+    currentPlayerMode === 'splash' && currentPlayerSceneId === activeScene?.id
+  const isPlayerShowingQuickHandout =
+    currentPlayerMode === 'handout' &&
+    currentPlayerSceneId === activeScene?.id &&
+    currentPlayerHandoutId === quickSceneHandout?.id
 
 
 
 
 
 
-  const activeZoneLinkedHandout =
 
-
-
-
-
-
-
-    activeZone?.linkedHandoutId && activeScene
-
-
-
-
-
-
-
-      ? activeScene.handouts.find((handout) => handout.id === activeZone.linkedHandoutId) ?? null
-
-
-
-
-
-
-
-      : null
-
-
-
-
-
-
-
-  const activeZoneLinkedCheck =
-
-
-
-
-
-
-
-    activeZone?.linkedCheckId && activeScene
-
-
-
-
-
-
-
-      ? activeScene.checksClues.find((entry) => entry.id === activeZone.linkedCheckId) ?? null
-
-
-
-
-
-
-
-      : null
-
-
-
-
-
-
-
-  const activeZoneLinkedMonster =
-
-
-
-
-
-
-
-    activeZone?.linkedMonsterId && activeScene
-
-
-
-
-
-
-
-      ? activeScene.monsterBlocks.find((monster) => monster.id === activeZone.linkedMonsterId) ?? null
-
-
-
-
-
-
-
-      : null
+  useEffect(() => {
+    if (!activeScene?.zones.length) {
+      // The modal cannot remain meaningful after the last zone disappears.
+       
+      setIsZoneModalOpen(false)
+    }
+  }, [activeScene?.zones.length])
 
 
 
@@ -11460,6 +11731,67 @@ export function GmWindow() {
 
   }
 
+  const {
+    beginMapPan,
+    isMapPanning,
+    resetMapViewport,
+    stopMapPan,
+    zoomMap,
+  } = useMapViewportControls({
+    activeSceneId: activeScene?.id ?? null,
+    activeMapViewport,
+    mapBoardRef,
+    updateSceneRuntimeState,
+  })
+
+  const activeMapGrid = normalizeMapGrid(activeSceneState?.mapGrid)
+  const isMapGridVisible = activeSceneState?.mapGridVisible ?? true
+  const hiddenFogZones =
+    activeScene && activeSceneState
+      ? activeScene.zones.filter((zone) => activeSceneState.hiddenZoneIds.includes(zone.id))
+      : []
+  const effectiveFogCells =
+    activeSceneState ? activeSceneState.fogCells : []
+
+  useEffect(() => {
+    const board = mapBoardRef.current
+
+    if (!board) {
+      return
+    }
+
+    const updateGridCellSize = () => {
+      const rect = board.getBoundingClientRect()
+      const nextCellSize = Math.max(
+        1,
+        rect.width / activeMapGrid.columns,
+      )
+
+      setMapGridCellSize((currentCellSize) =>
+        currentCellSize != null && Math.abs(currentCellSize - nextCellSize) < 0.5
+          ? currentCellSize
+          : nextCellSize,
+      )
+    }
+
+    updateGridCellSize()
+
+    if (typeof ResizeObserver === 'undefined') {
+      window.addEventListener('resize', updateGridCellSize)
+
+      return () => {
+        window.removeEventListener('resize', updateGridCellSize)
+      }
+    }
+
+    const resizeObserver = new ResizeObserver(updateGridCellSize)
+    resizeObserver.observe(board)
+
+    return () => {
+      resizeObserver.disconnect()
+    }
+  }, [activeMapGrid.columns, activeMapGrid.rows])
+
 
 
 
@@ -11499,6 +11831,46 @@ export function GmWindow() {
 
 
   const recentProjectSnapshots = [...projectSnapshots].reverse().slice(0, 6)
+  const tokenTrackerEntries = [...activeSceneState.tokens].sort((leftToken, rightToken) => {
+    if (leftToken.initiative == null && rightToken.initiative != null) {
+      return 1
+    }
+
+    if (leftToken.initiative != null && rightToken.initiative == null) {
+      return -1
+    }
+
+    if (
+      leftToken.initiative != null &&
+      rightToken.initiative != null &&
+      leftToken.initiative !== rightToken.initiative
+    ) {
+      return rightToken.initiative - leftToken.initiative
+    }
+
+    return leftToken.name.localeCompare(rightToken.name, 'ru-RU')
+  })
+  const initiativeTrackerTokens = initiativeTokens.length > 0 ? initiativeTokens : tokenTrackerEntries
+  const initiativeTrackerFocusToken =
+    activeInitiativeToken ?? activeToken ?? initiativeTrackerTokens[0] ?? null
+  const initiativeTrackerFocusIndex = initiativeTrackerFocusToken
+    ? initiativeTrackerTokens.findIndex((token) => token.id === initiativeTrackerFocusToken.id)
+    : -1
+  const initiativeTrackerWindowSize = 9
+  const initiativeTrackerVisibleTokens =
+    initiativeTrackerTokens.length <= 11
+      ? initiativeTrackerTokens
+      : Array.from({ length: initiativeTrackerWindowSize }, (_, index) => {
+          const offset = index - Math.floor(initiativeTrackerWindowSize / 2)
+          const baseIndex = initiativeTrackerFocusIndex >= 0 ? initiativeTrackerFocusIndex : 0
+          const tokenIndex =
+            (baseIndex + offset + initiativeTrackerTokens.length) % initiativeTrackerTokens.length
+          return initiativeTrackerTokens[tokenIndex]
+        })
+  const hiddenInitiativeTrackerTokenCount = Math.max(
+    0,
+    initiativeTrackerTokens.length - initiativeTrackerVisibleTokens.length,
+  )
 
 
 
@@ -11658,6 +12030,8 @@ export function GmWindow() {
 
 
 
+    // Drop token selection when the selected token is removed by scene edits.
+     
     setSelectedTokenId((currentId) => {
 
 
@@ -11762,7 +12136,7 @@ export function GmWindow() {
 
 
 
-      return activeSceneState.mapLayers[0]?.id ?? null
+      return activeSceneState.mapLayers.find((layer) => layer.isActive)?.id ?? activeSceneState.mapLayers[0]?.id ?? null
 
 
 
@@ -11850,7 +12224,7 @@ export function GmWindow() {
 
 
 
-      return activeSceneState.serviceMarkers[0]?.id ?? null
+      return null
 
 
 
@@ -11922,6 +12296,8 @@ export function GmWindow() {
 
 
 
+    // Drop zone selection when the selected zone is removed by scene edits.
+     
     setSelectedZoneId((currentId) => {
 
 
@@ -12042,6 +12418,8 @@ export function GmWindow() {
 
 
 
+      // Clear stale drag affordances when leaving fog tools.
+       
       setFogSelectionRect(null)
 
 
@@ -12058,7 +12436,10 @@ export function GmWindow() {
 
 
 
-  }, [fogSelectionRect, mapInteractionMode])
+    if (mapInteractionMode !== 'zone' && zoneSelectionRect) {
+      setZoneSelectionRect(null)
+    }
+  }, [fogSelectionRect, mapInteractionMode, zoneSelectionRect])
 
 
 
@@ -12258,846 +12639,7 @@ export function GmWindow() {
 
 
 
-  }, [redoStack.length, undoStack.length])
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-  function commitProjectState(
-
-
-
-
-
-
-
-    nextStateOrUpdater: ProjectState | ((currentState: ProjectState) => ProjectState),
-
-
-
-
-
-
-
-    options?: {
-
-
-
-
-
-
-
-      label?: string
-
-
-
-
-
-
-
-      recordHistory?: boolean
-
-
-
-
-
-
-
-      resetRedo?: boolean
-
-
-
-
-
-
-
-    },
-
-
-
-
-
-
-
-  ) {
-
-
-
-
-
-
-
-    setProjectState((currentState) => {
-
-
-
-
-
-
-
-      const nextState = syncProjectState(
-
-
-
-
-
-
-
-        typeof nextStateOrUpdater === 'function'
-
-
-
-
-
-
-
-          ? nextStateOrUpdater(currentState)
-
-
-
-
-
-
-
-          : nextStateOrUpdater,
-
-
-
-
-
-
-
-      )
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-      if (projectStatesEqual(currentState, nextState)) {
-
-
-
-
-
-
-
-        return currentState
-
-
-
-
-
-
-
-      }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-      if (options?.recordHistory ?? true) {
-
-
-
-
-
-
-
-        setUndoStack((currentUndoStack) => [
-
-
-
-
-
-
-
-          ...currentUndoStack.slice(-(projectHistoryLimit - 1)),
-
-
-
-
-
-
-
-          currentState,
-
-
-
-
-
-
-
-        ])
-
-
-
-
-
-
-
-        setProjectSnapshots((currentSnapshots) => [
-
-
-
-
-
-
-
-          ...currentSnapshots.slice(-(projectSnapshotLimit - 1)),
-
-
-
-
-
-
-
-          createProjectSnapshot(nextState, options?.label ?? 'Изменение проекта'),
-
-
-
-
-
-
-
-        ])
-
-
-
-
-
-
-
-      }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-      if (options?.resetRedo ?? true) {
-
-
-
-
-
-
-
-        setRedoStack([])
-
-
-
-
-
-
-
-      }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-      return nextState
-
-
-
-
-
-
-
-    })
-
-
-
-
-
-
-
-  }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-  function updateProjectState(
-
-
-
-
-
-
-
-    updater: (currentState: ProjectState) => ProjectState,
-
-
-
-
-
-
-
-    label = 'Изменение проекта',
-
-
-
-
-
-
-
-  ) {
-
-
-
-
-
-
-
-    commitProjectState(updater, { label })
-
-
-
-
-
-
-
-  }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-  function undoLastChange() {
-
-
-
-
-
-
-
-    setUndoStack((currentUndoStack) => {
-
-
-
-
-
-
-
-      if (currentUndoStack.length === 0) {
-
-
-
-
-
-
-
-        return currentUndoStack
-
-
-
-
-
-
-
-      }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-      const previousState = currentUndoStack[currentUndoStack.length - 1]
-
-
-
-
-
-
-
-      const currentSnapshot = projectStateRef.current
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-      setRedoStack((currentRedoStack) => [
-
-
-
-
-
-
-
-        ...currentRedoStack.slice(-(projectHistoryLimit - 1)),
-
-
-
-
-
-
-
-        currentSnapshot,
-
-
-
-
-
-
-
-      ])
-
-
-
-
-
-
-
-      setProjectSnapshots((currentSnapshots) => [
-
-
-
-
-
-
-
-        ...currentSnapshots.slice(-(projectSnapshotLimit - 1)),
-
-
-
-
-
-
-
-        createProjectSnapshot(previousState, 'Отмена изменения'),
-
-
-
-
-
-
-
-      ])
-
-
-
-
-
-
-
-      setProjectState(syncProjectState(previousState))
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-      return currentUndoStack.slice(0, -1)
-
-
-
-
-
-
-
-    })
-
-
-
-
-
-
-
-  }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-  function redoLastChange() {
-
-
-
-
-
-
-
-    setRedoStack((currentRedoStack) => {
-
-
-
-
-
-
-
-      if (currentRedoStack.length === 0) {
-
-
-
-
-
-
-
-        return currentRedoStack
-
-
-
-
-
-
-
-      }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-      const nextState = currentRedoStack[currentRedoStack.length - 1]
-
-
-
-
-
-
-
-      const currentSnapshot = projectStateRef.current
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-      setUndoStack((currentUndoStack) => [
-
-
-
-
-
-
-
-        ...currentUndoStack.slice(-(projectHistoryLimit - 1)),
-
-
-
-
-
-
-
-        currentSnapshot,
-
-
-
-
-
-
-
-      ])
-
-
-
-
-
-
-
-      setProjectSnapshots((currentSnapshots) => [
-
-
-
-
-
-
-
-        ...currentSnapshots.slice(-(projectSnapshotLimit - 1)),
-
-
-
-
-
-
-
-        createProjectSnapshot(nextState, 'Повтор изменения'),
-
-
-
-
-
-
-
-      ])
-
-
-
-
-
-
-
-      setProjectState(syncProjectState(nextState))
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-      return currentRedoStack.slice(0, -1)
-
-
-
-
-
-
-
-    })
-
-
-
-
-
-
-
-  }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-  function restoreProjectSnapshot(snapshotId: string) {
-
-
-
-
-
-
-
-    const targetSnapshot = projectSnapshots.find((snapshot) => snapshot.id === snapshotId)
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-    if (!targetSnapshot) {
-
-
-
-
-
-
-
-      return
-
-
-
-
-
-
-
-    }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-    commitProjectState(cloneProjectState(targetSnapshot.state), {
-
-
-
-
-
-
-
-      label: `Восстановлен снимок: ${targetSnapshot.label}`,
-
-
-
-
-
-
-
-    })
-
-
-
-
-
-
-
-  }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+  }, [redoLastChange, redoStack.length, undoLastChange, undoStack.length])
   function updateAdventure(
 
 
@@ -13418,6 +12960,25 @@ export function GmWindow() {
 
 
 
+  async function addUrlAssetToAdventure(
+    url: string | null | undefined,
+    kind: AssetKind,
+    title: string,
+  ) {
+    if (!url || !adventure || !/^https?:\/\//i.test(url)) {
+      return null
+    }
+
+    const asset = await createAssetRecordFromUrl(url, kind, title)
+
+    updateAdventure((currentAdventure) => ({
+      ...currentAdventure,
+      assetLibrary: [...currentAdventure.assetLibrary, asset],
+    }), `Добавлен ассет: ${asset.title}`)
+
+    return asset
+  }
+
   function updateSession(
 
 
@@ -13434,7 +12995,7 @@ export function GmWindow() {
 
 
 
-    label = 'Рзмене сос‚ояние сессии',
+    label = 'Изменение состояния сессии',
 
 
 
@@ -13610,7 +13171,7 @@ export function GmWindow() {
 
 
 
-    label = 'Рзмене сос‚ояние сцены',
+    label = 'Изменение состояния сцены',
 
 
 
@@ -13730,229 +13291,30 @@ export function GmWindow() {
 
 
 
-  function updateMapViewport(
-
-
-
-
-
-
-
-    updater: (viewport: MapViewport) => MapViewport,
-
-
-
-
-
-
-
-  ) {
-
-
-
-
-
-
-
+  function updateMapGrid(axis: keyof MapGridSettings, value: number) {
     if (!activeScene) {
-
-
-
-
-
-
-
       return
-
-
-
-
-
-
-
     }
 
+    updateSceneRuntimeState(activeScene.id, (sceneState) => ({
+      ...sceneState,
+      mapGrid: normalizeMapGrid({
+        ...sceneState.mapGrid,
+        [axis]: value,
+      }),
+    }))
+  }
 
-
-
-
-
-
-
-
-
-
-
-
-
+  function toggleMapGridVisibility() {
+    if (!activeScene) {
+      return
+    }
 
     updateSceneRuntimeState(activeScene.id, (sceneState) => ({
-
-
-
-
-
-
-
       ...sceneState,
-
-
-
-
-
-
-
-      mapViewport: updater(sceneState.mapViewport),
-
-
-
-
-
-
-
+      mapGridVisible: !(sceneState.mapGridVisible ?? true),
     }))
-
-
-
-
-
-
-
   }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-  function zoomMap(delta: number) {
-
-
-
-
-
-
-
-    updateMapViewport((viewport) => ({
-
-
-
-
-
-
-
-      ...viewport,
-
-
-
-
-
-
-
-      scale: clampMapScale(Number((viewport.scale + delta).toFixed(2))),
-
-
-
-
-
-
-
-    }))
-
-
-
-
-
-
-
-  }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-  function resetMapViewport() {
-
-
-
-
-
-
-
-    updateMapViewport(() => ({
-
-
-
-
-
-
-
-      scale: 1,
-
-
-
-
-
-
-
-      offsetX: 0,
-
-
-
-
-
-
-
-      offsetY: 0,
-
-
-
-
-
-
-
-    }))
-
-
-
-
-
-
-
-  }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
   function updateActiveSceneMapLayer(
 
@@ -14116,6 +13478,22 @@ export function GmWindow() {
 
   }
 
+  function setActiveSceneMapLayer(layerId: string) {
+    if (!activeScene) {
+      return
+    }
+
+    updateSceneRuntimeState(activeScene.id, (sceneState) => ({
+      ...sceneState,
+      mapLayers: sceneState.mapLayers.map((layer) => ({
+        ...layer,
+        isActive: layer.id === layerId,
+      })),
+    }))
+
+    setSelectedLayerId(layerId)
+  }
+
 
 
 
@@ -14250,7 +13628,7 @@ export function GmWindow() {
 
 
 
-    label = 'Рзменена сцена',
+    label = 'Изменена сцена',
 
 
 
@@ -14330,7 +13708,7 @@ export function GmWindow() {
 
 
 
-  function createDefaultZone(x: number, y: number): MapZone {
+  function createDefaultZone(x: number, y: number, width = 18, height = 14): MapZone {
 
 
 
@@ -14418,7 +13796,7 @@ export function GmWindow() {
 
 
 
-      width: 18,
+      width,
 
 
 
@@ -14426,7 +13804,7 @@ export function GmWindow() {
 
 
 
-      height: 14,
+      height,
 
 
 
@@ -14634,6 +14012,25 @@ export function GmWindow() {
 
 
 
+  function addZoneFromSelection(bounds: ZoneSelectionRect) {
+    if (!activeScene) {
+      return
+    }
+
+    const minimumWidth = 100 / activeMapGrid.columns
+    const minimumHeight = 100 / activeMapGrid.rows
+    const width = Math.min(100 - bounds.left, Math.max(bounds.width, minimumWidth))
+    const height = Math.min(100 - bounds.top, Math.max(bounds.height, minimumHeight))
+    const zone = createDefaultZone(bounds.left, bounds.top, width, height)
+
+    updateScene(activeScene.id, (scene) => ({
+      ...scene,
+      zones: [...scene.zones, zone],
+    }), 'Добавлена зона на карте')
+
+    setSelectedZoneId(zone.id)
+  }
+
   function updateZone(zoneId: string, updater: (zone: MapZone) => MapZone) {
 
 
@@ -14674,6 +14071,11 @@ export function GmWindow() {
 
 
 
+    const previousZones = activeScene.zones
+    const previousZone = previousZones.find((zone) => zone.id === zoneId)
+    const nextZones = previousZones.map((zone) => (zone.id === zoneId ? updater(zone) : zone))
+    const nextZone = nextZones.find((zone) => zone.id === zoneId)
+
     updateScene(activeScene.id, (scene) => ({
 
 
@@ -14690,7 +14092,7 @@ export function GmWindow() {
 
 
 
-      zones: scene.zones.map((zone) => (zone.id === zoneId ? updater(zone) : zone)),
+      zones: nextZones,
 
 
 
@@ -14700,11 +14102,23 @@ export function GmWindow() {
 
     }))
 
+    if (
+      previousZone &&
+      nextZone &&
+      activeSceneStateRef.current?.hiddenZoneIds.includes(zoneId)
+    ) {
+      const legacyHiddenZoneCells = new Set([
+        ...getFogCellIdsForZone(previousZone, activeMapGrid),
+        ...getFogCellIdsForZone(nextZone, activeMapGrid),
+      ])
 
-
-
-
-
+      if (legacyHiddenZoneCells.size > 0) {
+        updateSceneRuntimeState(activeScene.id, (sceneState) => ({
+          ...sceneState,
+          fogCells: sceneState.fogCells.filter((cellId) => !legacyHiddenZoneCells.has(cellId)),
+        }))
+      }
+    }
 
   }
 
@@ -14762,6 +14176,10 @@ export function GmWindow() {
 
 
 
+    const previousZones = activeScene.zones
+    const removedZone = previousZones.find((zone) => zone.id === zoneId)
+    const nextZones = previousZones.filter((zone) => zone.id !== zoneId)
+
     updateScene(activeScene.id, (scene) => ({
 
 
@@ -14778,7 +14196,7 @@ export function GmWindow() {
 
 
 
-      zones: scene.zones.filter((zone) => zone.id !== zoneId),
+      zones: nextZones,
 
 
 
@@ -14788,12 +14206,33 @@ export function GmWindow() {
 
     }))
 
+    updateSceneRuntimeState(activeScene.id, (sceneState) => {
+      const shouldClearLegacyZoneFog =
+        removedZone && sceneState.hiddenZoneIds.includes(zoneId)
+      const legacyHiddenZoneCells =
+        removedZone && shouldClearLegacyZoneFog
+          ? new Set(getFogCellIdsForZone(removedZone, activeMapGrid))
+          : null
+
+      return {
+        ...sceneState,
+        fogCells:
+          legacyHiddenZoneCells && legacyHiddenZoneCells.size > 0
+            ? sceneState.fogCells.filter((cellId) => !legacyHiddenZoneCells.has(cellId))
+            : sceneState.fogCells,
+        hiddenZoneIds: sceneState.hiddenZoneIds.filter((id) => id !== zoneId),
+      }
+    })
 
 
 
 
 
 
+
+    if (selectedZoneId === zoneId) {
+      setIsZoneModalOpen(false)
+    }
     setSelectedZoneId((currentId) => (currentId === zoneId ? null : currentId))
 
 
@@ -14818,7 +14257,12 @@ export function GmWindow() {
 
 
 
-  function moveZone(zoneId: string, clientX: number, clientY: number) {
+  function moveZone(
+    zoneId: string,
+    clientX: number,
+    clientY: number,
+    dragOffset: { x: number; y: number } | null = null,
+  ) {
 
 
 
@@ -14914,6 +14358,13 @@ export function GmWindow() {
 
 
 
+
+
+
+
+
+
+
     )
 
 
@@ -14946,7 +14397,7 @@ export function GmWindow() {
 
 
 
-      x,
+      x: clampZoneCoordinate(x - (dragOffset?.x ?? 0), zone.x),
 
 
 
@@ -14954,7 +14405,7 @@ export function GmWindow() {
 
 
 
-      y,
+      y: clampZoneCoordinate(y - (dragOffset?.y ?? 0), zone.y),
 
 
 
@@ -15002,7 +14453,7 @@ export function GmWindow() {
 
 
 
-    event: ReactPointerEvent<HTMLButtonElement>,
+    event: ReactPointerEvent<HTMLDivElement>,
 
 
 
@@ -15018,7 +14469,7 @@ export function GmWindow() {
 
 
 
-    if (mapInteractionMode !== 'navigate') {
+    if (mapInteractionMode !== 'navigate' && mapInteractionMode !== 'zone') {
 
 
 
@@ -15066,6 +14517,27 @@ export function GmWindow() {
 
 
 
+    zoneDragStartRef.current = {
+      x: event.clientX,
+      y: event.clientY,
+    }
+    const mapBoard = mapBoardRef.current
+    const zone = activeScene?.zones.find((entry) => entry.id === zoneId) ?? null
+    if (mapBoard && zone) {
+      const pointerPosition = resolveMapBoardPosition(
+        mapBoard,
+        event.clientX,
+        event.clientY,
+        activeMapViewport,
+      )
+      zoneDragOffsetRef.current = {
+        x: pointerPosition.x - zone.x,
+        y: pointerPosition.y - zone.y,
+      }
+    } else {
+      zoneDragOffsetRef.current = null
+    }
+    suppressZoneClickRef.current = false
     setSelectedZoneId(zoneId)
 
 
@@ -15074,7 +14546,6 @@ export function GmWindow() {
 
 
 
-    moveZone(zoneId, event.clientX, event.clientY)
 
 
 
@@ -15091,6 +14562,14 @@ export function GmWindow() {
 
 
     const handleMove = (moveEvent: PointerEvent) => {
+      if (zoneDragStartRef.current) {
+        const deltaX = moveEvent.clientX - zoneDragStartRef.current.x
+        const deltaY = moveEvent.clientY - zoneDragStartRef.current.y
+
+        if (Math.hypot(deltaX, deltaY) > tokenDragThreshold) {
+          suppressZoneClickRef.current = true
+        }
+      }
 
 
 
@@ -15098,7 +14577,9 @@ export function GmWindow() {
 
 
 
-      moveZone(zoneId, moveEvent.clientX, moveEvent.clientY)
+      if (suppressZoneClickRef.current) {
+        moveZone(zoneId, moveEvent.clientX, moveEvent.clientY, zoneDragOffsetRef.current)
+      }
 
 
 
@@ -15123,6 +14604,8 @@ export function GmWindow() {
 
 
     const handleUp = () => {
+      zoneDragStartRef.current = null
+      zoneDragOffsetRef.current = null
 
 
 
@@ -15194,7 +14677,117 @@ export function GmWindow() {
 
 
 
+  function beginZoneResize(
+    zoneId: string,
+    handle: ZoneResizeHandle,
+    event: ReactPointerEvent<HTMLDivElement>,
+  ) {
+    if (mapInteractionMode !== 'navigate' && mapInteractionMode !== 'zone') {
+      return
+    }
+
+    const mapBoard = mapBoardRef.current
+    const zone = activeScene?.zones.find((entry) => entry.id === zoneId) ?? null
+    if (!mapBoard || !zone) {
+      return
+    }
+
+    event.preventDefault()
+    event.stopPropagation()
+
+    const startPointer = resolveMapBoardPosition(
+      mapBoard,
+      event.clientX,
+      event.clientY,
+      activeMapViewport,
+    )
+
+    suppressZoneClickRef.current = true
+    zoneResizeStateRef.current = {
+      zoneId,
+      handle,
+      startX: startPointer.x,
+      startY: startPointer.y,
+      zone: {
+        x: zone.x,
+        y: zone.y,
+        width: zone.width,
+        height: zone.height,
+      },
+    }
+    setSelectedZoneId(zoneId)
+
+    const handleMove = (moveEvent: PointerEvent) => {
+      const resizeState = zoneResizeStateRef.current
+      if (!resizeState || resizeState.zoneId !== zoneId) {
+        return
+      }
+
+      const pointer = resolveMapBoardPosition(
+        mapBoard,
+        moveEvent.clientX,
+        moveEvent.clientY,
+        activeMapViewport,
+      )
+      const deltaX = pointer.x - resizeState.startX
+      const deltaY = pointer.y - resizeState.startY
+      const minimumSize = 6
+      let left = resizeState.zone.x
+      let top = resizeState.zone.y
+      let right = resizeState.zone.x + resizeState.zone.width
+      let bottom = resizeState.zone.y + resizeState.zone.height
+
+      if (resizeState.handle.includes('w')) {
+        left = Math.min(right - minimumSize, Math.max(0, resizeState.zone.x + deltaX))
+      }
+
+      if (resizeState.handle.includes('e')) {
+        right = Math.max(left + minimumSize, Math.min(100, resizeState.zone.x + resizeState.zone.width + deltaX))
+      }
+
+      if (resizeState.handle.includes('n')) {
+        top = Math.min(bottom - minimumSize, Math.max(0, resizeState.zone.y + deltaY))
+      }
+
+      if (resizeState.handle.includes('s')) {
+        bottom = Math.max(top + minimumSize, Math.min(100, resizeState.zone.y + resizeState.zone.height + deltaY))
+      }
+
+      updateZone(zoneId, (currentZone) => ({
+        ...currentZone,
+        x: left,
+        y: top,
+        width: clampZoneSize(right - left, currentZone.width),
+        height: clampZoneSize(bottom - top, currentZone.height),
+      }))
+    }
+
+    const handleUp = () => {
+      zoneResizeStateRef.current = null
+      window.removeEventListener('pointermove', handleMove)
+      window.removeEventListener('pointerup', handleUp)
+    }
+
+    window.addEventListener('pointermove', handleMove)
+    window.addEventListener('pointerup', handleUp)
+  }
+
+  function handleZonePointerDown(zoneId: string, event: ReactPointerEvent<HTMLDivElement>) {
+    const resizeHandle = getZoneResizeHandle(event.currentTarget, event.clientX, event.clientY)
+
+    if (resizeHandle) {
+      beginZoneResize(zoneId, resizeHandle, event)
+      return
+    }
+
+    beginZoneDrag(zoneId, event)
+  }
+
   function pushMapToPlayer(scene: AdventureScene) {
+    if (currentPlayerMode === 'map' && currentPlayerSceneId === scene.id) {
+      setStandby()
+      return
+    }
 
 
 
@@ -15274,7 +14867,7 @@ export function GmWindow() {
 
 
 
-    }), `Ргрока показана карта: ${scene.title}`)
+    }), `Игрока показана карта: ${scene.title}`)
 
 
 
@@ -15299,6 +14892,10 @@ export function GmWindow() {
 
 
   function pushSplashToPlayer(scene: AdventureScene) {
+    if (currentPlayerMode === 'splash' && currentPlayerSceneId === scene.id) {
+      setStandby()
+      return
+    }
 
 
 
@@ -15378,7 +14975,7 @@ export function GmWindow() {
 
 
 
-    }), `Ргрока показан splash: ${scene.title}`)
+    }), `Игрока показан splash: ${scene.title}`)
 
 
 
@@ -15482,7 +15079,7 @@ export function GmWindow() {
 
 
 
-    }), `Ргрока показана раздатка: ${handout.title}`)
+    }), `Игрока показана раздатка: ${handout.title}`)
 
 
 
@@ -15706,6 +15303,15 @@ export function GmWindow() {
 
 
 
+    if (
+      currentPlayerMode === 'handout' &&
+      currentPlayerSceneId === scene.id &&
+      currentPlayerHandoutId === handout.id
+    ) {
+      setStandby()
+      return
+    }
+
     setSelectedHandoutId(handout.id)
 
 
@@ -15738,7 +15344,7 @@ export function GmWindow() {
 
 
 
-  function focusZoneLinkedHandout(zone: MapZone) {
+  function focusLinkedHandout(handoutId: string | null | undefined) {
 
 
 
@@ -15746,7 +15352,7 @@ export function GmWindow() {
 
 
 
-    if (!zone.linkedHandoutId) {
+    if (!handoutId) {
 
 
 
@@ -15778,7 +15384,7 @@ export function GmWindow() {
 
 
 
-    setSelectedHandoutId(zone.linkedHandoutId)
+    setSelectedHandoutId(handoutId)
 
 
 
@@ -15786,7 +15392,7 @@ export function GmWindow() {
 
 
 
-    setActiveEditorTab('handouts')
+    openSceneEditorSection('handouts')
 
 
 
@@ -15794,6 +15400,10 @@ export function GmWindow() {
 
 
 
+  }
+
+  function focusZoneLinkedHandout(zone: MapZone) {
+    focusLinkedHandout(zone.linkedHandoutId)
   }
 
 
@@ -15810,7 +15420,7 @@ export function GmWindow() {
 
 
 
-  function showZoneLinkedHandoutToPlayers(zone: MapZone) {
+  function showLinkedHandoutToPlayers(handoutId: string | null | undefined) {
 
 
 
@@ -15818,7 +15428,7 @@ export function GmWindow() {
 
 
 
-    if (!activeScene || !zone.linkedHandoutId) {
+    if (!activeScene || !handoutId) {
 
 
 
@@ -15858,7 +15468,7 @@ export function GmWindow() {
 
 
 
-      (handout) => handout.id === zone.linkedHandoutId,
+      (handout) => handout.id === handoutId,
 
 
 
@@ -15932,6 +15542,9 @@ export function GmWindow() {
 
   }
 
+  function showZoneLinkedHandoutToPlayers(zone: MapZone) {
+    showLinkedHandoutToPlayers(zone.linkedHandoutId)
+  }
 
 
 
@@ -15946,7 +15559,8 @@ export function GmWindow() {
 
 
 
-  function focusZoneLinkedCheck(zone: MapZone) {
+
+  function focusLinkedCheck(checkId: string | null | undefined) {
 
 
 
@@ -15954,7 +15568,10 @@ export function GmWindow() {
 
 
 
-    if (!zone.linkedCheckId) {
+    if (
+      !checkId ||
+      !activeScene?.checksClues.some((entry) => entry.id === checkId)
+    ) {
 
 
 
@@ -15986,15 +15603,10 @@ export function GmWindow() {
 
 
 
-    setSelectedCheckId(zone.linkedCheckId)
-
-
-
-
-
-
-
+    setLinkedCheckPreviewId(checkId)
     setActiveEditorTab('checks')
+    setIsSceneEditorModalOpen(true)
+    setIsSceneEditorActionsOpen(false)
 
 
 
@@ -16002,6 +15614,10 @@ export function GmWindow() {
 
 
 
+  }
+
+  function focusZoneLinkedCheck(zone: MapZone) {
+    focusLinkedCheck(zone.linkedCheckId)
   }
 
 
@@ -16058,7 +15674,7 @@ export function GmWindow() {
 
 
 
-    setSelectedMonsterId(zone.linkedMonsterId)
+    selectMonsterForEditing(zone.linkedMonsterId)
 
 
 
@@ -16066,7 +15682,7 @@ export function GmWindow() {
 
 
 
-    setActiveEditorTab('monsters')
+    openSceneEditorSection('monsters')
 
 
 
@@ -16274,231 +15890,6 @@ export function GmWindow() {
 
 
 
-  async function handleMapUpload(file: File | null) {
-
-
-
-
-
-
-
-    if (!file || !activeScene) {
-
-
-
-
-
-
-
-      return
-
-
-
-
-
-
-
-    }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-    const asset = await addAssetToAdventure(file, 'image', activeScene.map.title)
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-    if (!asset) {
-
-
-
-
-
-
-
-      return
-
-
-
-
-
-
-
-    }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-    const imageSrc = asset.dataUrl
-
-
-
-
-
-
-
-    const nextBaseLayer = createBaseMapLayer(activeScene, imageSrc)
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-    updateScene(activeScene.id, (scene) => ({
-
-
-
-
-
-
-
-      ...scene,
-
-
-
-
-
-
-
-      map: {
-
-
-
-
-
-
-
-        ...scene.map,
-
-
-
-
-
-
-
-        imageAssetId: asset.id,
-
-
-
-
-
-
-
-        imageSrc,
-
-
-
-
-
-
-
-      },
-
-
-
-
-
-
-
-    }))
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-    updateSceneRuntimeState(activeScene.id, (sceneState) => ({
-
-
-
-
-
-
-
-      ...sceneState,
-
-
-
-
-
-
-
-      mapImageSrc: imageSrc,
-
-
-
-
-
-
-
-      mapLayers: [nextBaseLayer, ...sceneState.mapLayers.slice(1)],
-
-
-
-
-
-
-
-    }))
-
-
-
-
-
-
-
-  }
 
 
 
@@ -16786,7 +16177,7 @@ export function GmWindow() {
 
 
 
-    const asset = await addAssetToAdventure(file, 'image', activeScene.splash.title)
+    const asset = await addAssetToAdventure(file, 'image')
 
 
 
@@ -17082,542 +16473,45 @@ export function GmWindow() {
 
 
 
-  async function handleAdditionalLayerUpload(file: File | null) {
-
-
-
-
-
-
-
-    if (!file || !activeScene) {
-
-
-
-
-
-
-
+  function clearSplashImage() {
+    if (!activeScene) {
       return
-
-
-
-
-
-
-
     }
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-    const asset = await addAssetToAdventure(
-
-
-
-
-
-
-
-      file,
-
-
-
-
-
-
-
-      'image',
-
-
-
-
-
-
-
-      newLayerTitle.trim() || file.name.replace(/\.[^.]+$/, '') || 'Слой',
-
-
-
-
-
-
-
-    )
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-    if (!asset) {
-
-
-
-
-
-
-
-      return
-
-
-
-
-
-
-
-    }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-    const imageSrc = asset.dataUrl
-
-
-
-
-
-
-
-    const fallbackTitle = file.name.replace(/\.[^.]+$/, '') || 'Слой'
-
-
-
-
-
-
-
-    const title = newLayerTitle.trim() || fallbackTitle
-
-
-
-
-
-
-
-    const layer: MapLayerInstance = {
-
-
-
-
-
-
-
-      id: createEntityId('layer'),
-
-
-
-
-
-
-
-      title,
-
-
-
-
-
-
-
-      imageSrc,
-
-
-
-
-
-
-
-      visibleToGm: true,
-
-
-
-
-
-
-
-      visibleToPlayers: false,
-
-
-
-
-
-
-
-    }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-    updateSceneRuntimeState(activeScene.id, (sceneState) => ({
-
-
-
-
-
-
-
-      ...sceneState,
-
-
-
-
-
-
-
-      mapLayers: [...sceneState.mapLayers, layer],
-
-
-
-
-
-
-
+    updateScene(activeScene.id, (scene) => ({
+      ...scene,
+      splash: {
+        ...scene.splash,
+        imageAssetId: null,
+        imageSrc: null,
+      },
     }))
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-    setNewLayerTitle('')
-
-
-
-
-
-
-
-    setSelectedLayerId(layer.id)
-
-
-
-
-
-
-
   }
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-  async function handleCreateToken() {
-
-
-
-
-
-
-
-    if (!activeScene || !newTokenName.trim() || !newTokenFile) {
-
-
-
-
-
-
-
+  function addEmptyMapLayer() {
+    if (!activeScene) {
       return
-
-
-
-
-
-
-
     }
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-    const imageSrc = await readFileAsDataUrl(newTokenFile)
-
-
-
-
-
-
-
-    const baseName = newTokenName.trim()
-
-
-
-
-
-
-
-    const count = clampSpawnCount(newTokenCount)
-
-
-
-
-
-
-
-    const tokens = buildTokenCopies(
-
-
-
-
-
-
-
-      (index) =>
-
-
-
-
-
-
-
-        createSceneToken(
-
-
-
-
-
-
-
-          count > 1 ? `${baseName} ${index + 1}` : baseName,
-
-
-
-
-
-
-
-          newTokenKind,
-
-
-
-
-
-
-
-          imageSrc,
-
-
-
-
-
-
-
-          null,
-
-
-
-
-
-
-
-          null,
-
-
-
-
-
-
-
-          null,
-
-
-
-
-
-
-
-          null,
-
-
-
-
-
-
-
-          count > 1 ? baseName : null,
-
-
-
-
-
-
-
-        ),
-
-
-
-
-
-
-
-      count,
-
-
-
-
-
-
-
-    )
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-    pushTokensToScene(
-
-
-
-
-
-
-
-      tokens,
-
-
-
-
-
-
-
-      count > 1 ? `Добавлена группа фишек: ${baseName}` : `Добавлена фишка: ${baseName}`,
-
-
-
-
-
-
-
-    )
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-    setNewTokenName('')
-
-
-
-
-
-
-
-    setNewTokenKind('monster')
-
-
-
-
-
-
-
-    setNewTokenCount(1)
-
-
-
-
-
-
-
-    setNewTokenFile(null)
-
-
-
-
-
-
-
+    const layer: MapLayerInstance = {
+      id: createEntityId('layer'),
+      title: 'Новый слой',
+      imageSrc: null,
+      isActive: true,
+      visibleToGm: true,
+      visibleToPlayers: false,
+      scale: 1,
+      rotation: 0,
+    }
+
+    updateSceneRuntimeState(activeScene.id, (sceneState) => ({
+      ...sceneState,
+      mapLayers: sceneState.mapLayers
+        .map((currentLayer) => ({ ...currentLayer, isActive: false }))
+        .concat(layer),
+    }))
+
+    setSelectedLayerId(layer.id)
   }
 
 
@@ -17748,6 +16642,8 @@ export function GmWindow() {
 
       linkedMonsterId,
 
+      linkedCharacterId: null,
+
 
 
 
@@ -17786,7 +16682,7 @@ export function GmWindow() {
 
 
 
-      size: kind === 'monster' ? 72 : 64,
+      space: 'medium',
 
 
 
@@ -17827,6 +16723,7 @@ export function GmWindow() {
 
 
       initiative,
+      conditions: [],
 
 
 
@@ -17994,7 +16891,7 @@ export function GmWindow() {
 
 
 
-    pushTokensToScene([token], `Добавлена С„РёС€ка: ${token.name}`)
+    pushTokensToScene([token], `Добавлена фишка: ${token.name}`)
 
 
 
@@ -18306,6 +17203,19 @@ export function GmWindow() {
 
 
 
+  async function handleTokenImageReplace(tokenId: string, file: File | null) {
+    if (!file) {
+      return
+    }
+
+    const imageSrc = await readFileAsDataUrl(file)
+
+    updateToken(tokenId, (token) => ({
+      ...token,
+      imageSrc,
+    }))
+  }
+
   function createTokensFromMonster(monster: MonsterBlock, count = 1) {
 
 
@@ -18482,7 +17392,7 @@ export function GmWindow() {
 
 
 
-        : `Добавлена С„РёС€ка монстра: ${monster.name}`,
+        : `Добавлена фишка монстра: ${monster.name}`,
 
 
 
@@ -18554,7 +17464,7 @@ export function GmWindow() {
 
 
 
-    setSelectedMonsterId(token.linkedMonsterId)
+    selectMonsterForEditing(token.linkedMonsterId)
 
 
 
@@ -18562,7 +17472,7 @@ export function GmWindow() {
 
 
 
-    setActiveEditorTab('monsters')
+    openSceneEditorSection('monsters')
 
 
 
@@ -18570,6 +17480,11 @@ export function GmWindow() {
 
 
 
+  }
+
+  function focusTokenLinkedCharacter(characterId: string) {
+    setSelectedCharacterId(characterId)
+    setIsCharacterModalOpen(true)
   }
 
 
@@ -19622,7 +18537,9 @@ export function GmWindow() {
 
 
 
-      note: newServiceMarkerNote.trim(),
+      note: '',
+      linkedHandoutId: null,
+      linkedCheckId: null,
 
 
 
@@ -19832,6 +18749,7 @@ export function GmWindow() {
 
 
     )
+    setIsServiceMarkerModalOpen(false)
 
 
 
@@ -20167,7 +19085,7 @@ export function GmWindow() {
 
 
 
-    event: ReactPointerEvent<HTMLButtonElement>,
+    event: ReactPointerEvent<HTMLElement>,
 
 
 
@@ -20183,7 +19101,7 @@ export function GmWindow() {
 
 
 
-    if (mapInteractionMode !== 'navigate') {
+    if (mapInteractionMode !== 'navigate' && mapInteractionMode !== 'marker') {
 
 
 
@@ -20232,6 +19150,9 @@ export function GmWindow() {
 
 
     setSelectedServiceMarkerId(markerId)
+    setIsServiceMarkerDragging(true)
+    serviceMarkerDragStartRef.current = { x: event.clientX, y: event.clientY }
+    suppressServiceMarkerClickRef.current = false
 
 
 
@@ -20256,6 +19177,14 @@ export function GmWindow() {
 
 
     const handleMove = (moveEvent: PointerEvent) => {
+      if (serviceMarkerDragStartRef.current) {
+        const deltaX = moveEvent.clientX - serviceMarkerDragStartRef.current.x
+        const deltaY = moveEvent.clientY - serviceMarkerDragStartRef.current.y
+
+        if (Math.hypot(deltaX, deltaY) > tokenDragThreshold) {
+          suppressServiceMarkerClickRef.current = true
+        }
+      }
 
 
 
@@ -20287,7 +19216,15 @@ export function GmWindow() {
 
 
 
-    const handleUp = () => {
+    const handleUp = (upEvent: PointerEvent) => {
+      if (serviceMarkerDragStartRef.current) {
+        const deltaX = upEvent.clientX - serviceMarkerDragStartRef.current.x
+        const deltaY = upEvent.clientY - serviceMarkerDragStartRef.current.y
+
+        if (Math.hypot(deltaX, deltaY) > tokenDragThreshold) {
+          suppressServiceMarkerClickRef.current = true
+        }
+      }
 
 
 
@@ -20304,6 +19241,8 @@ export function GmWindow() {
 
 
       window.removeEventListener('pointerup', handleUp)
+      setIsServiceMarkerDragging(false)
+      serviceMarkerDragStartRef.current = null
 
 
 
@@ -20432,6 +19371,14 @@ export function GmWindow() {
 
 
       activeMapViewport,
+
+
+
+
+
+
+
+      activeMapGrid,
 
 
 
@@ -20800,6 +19747,22 @@ export function GmWindow() {
 
 
   function applyFogToZone(zone: MapZone, mode: 'fog-draw' | 'fog-erase') {
+    if (!activeScene) {
+      return
+    }
+
+    updateSceneRuntimeState(activeScene.id, (sceneState) => {
+      const nextHiddenZoneIds =
+        mode === 'fog-draw'
+          ? Array.from(new Set([...sceneState.hiddenZoneIds, zone.id]))
+          : sceneState.hiddenZoneIds.filter((id) => id !== zone.id)
+
+      return {
+        ...sceneState,
+        hiddenZoneIds: nextHiddenZoneIds,
+      }
+    }, mode === 'fog-draw' ? `Скрыта зона туманом: ${zone.title}` : `Открыта зона: ${zone.title}`)
+    return
 
 
 
@@ -20815,7 +19778,7 @@ export function GmWindow() {
 
 
 
-      getFogCellIdsForZone(zone),
+      getFogCellIdsForZone(zone, activeMapGrid),
 
 
 
@@ -20975,7 +19938,7 @@ export function GmWindow() {
 
 
 
-      new Set(visibleZones.flatMap((zone) => getFogCellIdsForZone(zone))),
+      new Set(visibleZones.flatMap((zone) => getFogCellIdsForZone(zone, activeMapGrid))),
 
 
 
@@ -21070,6 +20033,8 @@ export function GmWindow() {
 
 
 
+
+  void applyFogToVisibleZones
 
   function isPointInsideZone(x: number, y: number, zone: MapZone) {
 
@@ -21600,6 +20565,7 @@ export function GmWindow() {
 
 
           bounds.bottom,
+          activeMapGrid,
 
 
 
@@ -21808,6 +20774,7 @@ export function GmWindow() {
 
 
     const currentFogCells = activeSceneStateRef.current?.fogCells ?? []
+    const currentHiddenZoneIds = activeSceneStateRef.current?.hiddenZoneIds ?? []
 
 
 
@@ -21847,7 +20814,8 @@ export function GmWindow() {
 
 
 
-        getFogCellIdsForZone(zone).some((cellId) => currentFogCells.includes(cellId)),
+        (currentHiddenZoneIds.includes(zone.id) ||
+          getFogCellIdsForZone(zone, activeMapGrid).some((cellId) => currentFogCells.includes(cellId))),
 
 
 
@@ -21863,7 +20831,7 @@ export function GmWindow() {
 
 
 
-    const fogToReveal = new Set(autoRevealZones.flatMap((zone) => getFogCellIdsForZone(zone)))
+    const fogToReveal = new Set(autoRevealZones.flatMap((zone) => getFogCellIdsForZone(zone, activeMapGrid)))
 
 
 
@@ -21920,6 +20888,12 @@ export function GmWindow() {
 
 
         ),
+        hiddenZoneIds:
+          autoRevealZones.length > 0
+            ? activeSceneStateRef.current.hiddenZoneIds.filter(
+                (zoneId) => !autoRevealZones.some((zone) => zone.id === zoneId),
+              )
+            : activeSceneStateRef.current.hiddenZoneIds,
 
 
 
@@ -22040,6 +21014,10 @@ export function GmWindow() {
 
 
               : sceneState.fogCells,
+          hiddenZoneIds:
+            autoRevealZones.length > 0
+              ? sceneState.hiddenZoneIds.filter((zoneId) => !autoRevealZones.some((zone) => zone.id === zoneId))
+              : sceneState.hiddenZoneIds,
 
 
 
@@ -22079,7 +21057,7 @@ export function GmWindow() {
 
 
 
-        : 'Перемещена С„РёС€ка',
+        : 'Перемещена фишка',
 
 
 
@@ -22110,6 +21088,54 @@ export function GmWindow() {
 
 
 
+
+  function getTokenPointerAngle(tokenId: string, clientX: number, clientY: number) {
+    const mapBoard = mapBoardRef.current
+    const token = activeSceneStateRef.current?.tokens.find((entry) => entry.id === tokenId)
+
+    if (!mapBoard || !token) {
+      return null
+    }
+
+    const rect = mapBoard.getBoundingClientRect()
+    const centerX =
+      rect.left + activeMapViewport.offsetX + (rect.width * (token.x / 100) * activeMapViewport.scale)
+    const centerY =
+      rect.top + activeMapViewport.offsetY + (rect.height * (token.y / 100) * activeMapViewport.scale)
+
+    return normalizeRotationDegrees(
+      (Math.atan2(clientY - centerY, clientX - centerX) * 180) / Math.PI + 90,
+  )
+}
+
+function isZoneHiddenByFog(zoneId: string, hiddenZoneIds: string[]) {
+  return hiddenZoneIds.includes(zoneId)
+}
+
+  function clearAllFog() {
+    updateSceneRuntimeState(
+      activeScene.id,
+      (sceneState) => ({
+        ...sceneState,
+        fogCells: [],
+        hiddenZoneIds: [],
+      }),
+      'Очищен весь туман войны',
+    )
+  }
+
+  function clearTokenInteractionState() {
+    if (tokenRotateHoldTimerRef.current) {
+      clearTimeout(tokenRotateHoldTimerRef.current)
+      tokenRotateHoldTimerRef.current = null
+    }
+
+    tokenDragStartRef.current = null
+    tokenPointerPositionRef.current = null
+    tokenInteractionModeRef.current = 'move'
+    tokenRotationGestureRef.current = null
+    setRotatingTokenId(null)
+  }
 
   function beginTokenDrag(
 
@@ -22191,7 +21217,46 @@ export function GmWindow() {
 
 
 
-    moveToken(tokenId, event.clientX, event.clientY)
+    event.currentTarget.setPointerCapture?.(event.pointerId)
+
+    tokenDragStartRef.current = {
+      x: event.clientX,
+      y: event.clientY,
+    }
+    tokenPointerPositionRef.current = {
+      x: event.clientX,
+      y: event.clientY,
+    }
+    tokenInteractionModeRef.current = 'move'
+    tokenRotationGestureRef.current = null
+    suppressTokenClickRef.current = false
+    setRotatingTokenId(null)
+    if (tokenRotateHoldTimerRef.current) {
+      clearTimeout(tokenRotateHoldTimerRef.current)
+    }
+
+    tokenRotateHoldTimerRef.current = setTimeout(() => {
+      const pointerPosition = tokenPointerPositionRef.current
+
+      if (!pointerPosition) {
+        return
+      }
+
+      const token = activeSceneStateRef.current?.tokens.find((entry) => entry.id === tokenId)
+      const angle = getTokenPointerAngle(tokenId, pointerPosition.x, pointerPosition.y)
+
+      if (!token || angle == null) {
+        return
+      }
+
+      tokenInteractionModeRef.current = 'rotate'
+      tokenRotationGestureRef.current = {
+        tokenId,
+        angleOffset: getTokenRotation(token) - angle,
+      }
+      suppressTokenClickRef.current = true
+      setRotatingTokenId(tokenId)
+    }, tokenRotateHoldDelay)
 
 
 
@@ -22208,6 +21273,10 @@ export function GmWindow() {
 
 
     const handleMove = (moveEvent: PointerEvent) => {
+      tokenPointerPositionRef.current = {
+        x: moveEvent.clientX,
+        y: moveEvent.clientY,
+      }
 
 
 
@@ -22215,7 +21284,43 @@ export function GmWindow() {
 
 
 
-      moveToken(tokenId, moveEvent.clientX, moveEvent.clientY)
+      if (tokenDragStartRef.current) {
+        const deltaX = moveEvent.clientX - tokenDragStartRef.current.x
+        const deltaY = moveEvent.clientY - tokenDragStartRef.current.y
+        const distance = Math.hypot(deltaX, deltaY)
+
+        if (
+          tokenInteractionModeRef.current === 'move' &&
+          tokenRotateHoldTimerRef.current &&
+          distance > tokenRotateHoldMoveTolerance
+        ) {
+          clearTimeout(tokenRotateHoldTimerRef.current)
+          tokenRotateHoldTimerRef.current = null
+        }
+
+        if (distance > tokenDragThreshold) {
+          suppressTokenClickRef.current = true
+        }
+      }
+
+      if (tokenInteractionModeRef.current === 'rotate') {
+        const rotationGesture = tokenRotationGestureRef.current
+        const angle = getTokenPointerAngle(tokenId, moveEvent.clientX, moveEvent.clientY)
+
+        if (!rotationGesture || angle == null) {
+          return
+        }
+
+        updateToken(rotationGesture.tokenId, (token) => ({
+          ...token,
+          rotation: normalizeRotationDegrees(angle + rotationGesture.angleOffset),
+        }))
+        return
+      }
+
+      if (suppressTokenClickRef.current) {
+        moveToken(tokenId, moveEvent.clientX, moveEvent.clientY)
+      }
 
 
 
@@ -22256,6 +21361,7 @@ export function GmWindow() {
 
 
       window.removeEventListener('pointerup', handleUp)
+      clearTokenInteractionState()
 
 
 
@@ -22311,245 +21417,63 @@ export function GmWindow() {
 
 
 
-  function beginMapPan(event: ReactPointerEvent<HTMLDivElement>) {
-
-
-
-
-
-
-
-    if (!activeScene) {
-
-
-
-
-
-
-
+  function beginZoneSelection(event: ReactPointerEvent<HTMLDivElement>) {
+    if (!activeScene || !mapTransformLayerRef.current) {
       return
-
-
-
-
-
-
-
     }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
     event.preventDefault()
+    event.stopPropagation()
 
+    const startClientX = event.clientX
+    const startClientY = event.clientY
+    const startPosition = getElementRelativePercentPosition(
+      mapTransformLayerRef.current,
+      startClientX,
+      startClientY,
+    )
 
+    const updateRect = (clientX: number, clientY: number) => {
+      const nextPosition = getElementRelativePercentPosition(
+        mapTransformLayerRef.current,
+        clientX,
+        clientY,
+      )
 
+      const left = Math.min(startPosition.percentX, nextPosition.percentX)
+      const top = Math.min(startPosition.percentY, nextPosition.percentY)
+      const width = Math.abs(startPosition.percentX - nextPosition.percentX)
+      const height = Math.abs(startPosition.percentY - nextPosition.percentY)
 
+      setZoneSelectionRect({ left, top, width, height })
 
+      return { left, top, width, height }
+    }
 
-
-    setIsMapPanning(true)
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-    const startX = event.clientX
-
-
-
-
-
-
-
-    const startY = event.clientY
-
-
-
-
-
-
-
-    const startViewport = activeMapViewport
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+    updateRect(startClientX, startClientY)
 
     const handleMove = (moveEvent: PointerEvent) => {
-
-
-
-
-
-
-
-      updateMapViewport(() => ({
-
-
-
-
-
-
-
-        ...startViewport,
-
-
-
-
-
-
-
-        offsetX: startViewport.offsetX + (moveEvent.clientX - startX),
-
-
-
-
-
-
-
-        offsetY: startViewport.offsetY + (moveEvent.clientY - startY),
-
-
-
-
-
-
-
-      }))
-
-
-
-
-
-
-
+      updateRect(moveEvent.clientX, moveEvent.clientY)
     }
 
+    const handleUp = (upEvent: PointerEvent) => {
+      const bounds = updateRect(upEvent.clientX, upEvent.clientY)
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-    const handleUp = () => {
-
-
-
-
-
-
-
-      setIsMapPanning(false)
-
-
-
-
-
-
-
+      setZoneSelectionRect(null)
       window.removeEventListener('pointermove', handleMove)
-
-
-
-
-
-
-
       window.removeEventListener('pointerup', handleUp)
 
+      if (Math.hypot(upEvent.clientX - startClientX, upEvent.clientY - startClientY) <= tokenDragThreshold) {
+        addZoneAt(upEvent.clientX, upEvent.clientY)
+        return
+      }
 
-
-
-
-
-
+      addZoneFromSelection(bounds)
     }
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
     window.addEventListener('pointermove', handleMove)
-
-
-
-
-
-
-
     window.addEventListener('pointerup', handleUp)
-
-
-
-
-
-
-
   }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
   function handleMapBoardPointerDown(event: ReactPointerEvent<HTMLDivElement>) {
 
@@ -22591,10 +21515,34 @@ export function GmWindow() {
 
 
 
+    if (openCompactZoneToolsZoneId) {
+      setOpenCompactZoneToolsZoneId(null)
+    }
+
     const target = event.target
     if (
       target instanceof HTMLElement &&
-      target.closest('.service-marker, .token, .map-overlay-button, .map-title-badge, .modal-backdrop, .modal-card')
+      target.closest(
+        [
+          'button',
+          'input',
+          'select',
+          'textarea',
+          '[role="button"]',
+          '.service-marker',
+          '.token',
+          '.map-zone',
+          '.map-menu-panel',
+          '.map-utility-panel',
+          '.map-corner-panel',
+          '.map-title-badge',
+          '.map-scene-editor-badge',
+          '.map-initiative-tracker',
+          '.modal-backdrop',
+          '.modal-card',
+          '.modal-dialog',
+        ].join(', '),
+      )
     ) {
       return
     }
@@ -22719,7 +21667,7 @@ export function GmWindow() {
 
 
 
-      addZoneAt(event.clientX, event.clientY)
+      beginZoneSelection(event)
 
 
 
@@ -22975,7 +21923,7 @@ export function GmWindow() {
 
 
 
-    setIsMapPanning(false)
+    stopMapPan()
 
 
 
@@ -23511,14 +22459,6 @@ export function GmWindow() {
 
 
 
-    setSelectedCheckId(null)
-
-
-
-
-
-
-
     setSelectedMonsterId(null)
 
 
@@ -23744,14 +22684,6 @@ export function GmWindow() {
 
 
     setSelectedHandoutId(null)
-
-
-
-
-
-
-
-    setSelectedCheckId(null)
 
 
 
@@ -24063,14 +22995,6 @@ export function GmWindow() {
 
 
 
-    setSelectedCheckId(null)
-
-
-
-
-
-
-
     setSelectedMonsterId(null)
 
 
@@ -24327,14 +23251,6 @@ export function GmWindow() {
 
 
 
-    setSelectedCheckId(null)
-
-
-
-
-
-
-
     setSelectedMonsterId(null)
 
 
@@ -24519,6 +23435,126 @@ export function GmWindow() {
 
 
 
+  }
+
+  function triggerCharacterImport() {
+    setImportFeedback(null)
+    setCharacterImportTargetId(null)
+
+    if (characterImportFileInputRef.current) {
+      characterImportFileInputRef.current.value = ''
+      characterImportFileInputRef.current.click()
+    }
+  }
+
+  function triggerCharacterUpdate(characterId: string) {
+    setImportFeedback(null)
+    setCharacterImportTargetId(characterId)
+
+    if (characterImportFileInputRef.current) {
+      characterImportFileInputRef.current.value = ''
+      characterImportFileInputRef.current.click()
+    }
+  }
+
+  async function handleCharacterImport(file: File | null) {
+    if (!file || !adventure) {
+      setCharacterImportTargetId(null)
+      return
+    }
+
+    try {
+      const targetCharacter =
+        characterImportTargetId
+          ? adventure.characters.find((character) => character.id === characterImportTargetId) ?? null
+          : null
+      const parsed = JSON.parse(await file.text()) as unknown
+      const importedCharacter = createPlayerCharacterFromLssJson(parsed)
+      const nextCharacterId =
+        targetCharacter?.id ??
+        createUniqueAdventureId(
+          importedCharacter.id || importedCharacter.name,
+          adventure.characters.map((character) => character.id),
+        )
+      let character: PlayerCharacter = {
+        ...importedCharacter,
+        id: nextCharacterId,
+      }
+      let imageImportWarning = ''
+
+      if (character.avatarSrc && /^https?:\/\//i.test(character.avatarSrc)) {
+        try {
+          const imageAsset = await addUrlAssetToAdventure(
+            character.avatarSrc,
+            'image',
+            character.name,
+          )
+
+          if (imageAsset) {
+            character = {
+              ...character,
+              avatarAssetId: imageAsset.id,
+              avatarSrc: imageAsset.dataUrl,
+            }
+          }
+        } catch (error) {
+          imageImportWarning =
+            error instanceof Error
+              ? ` Портрет остался внешней ссылкой: ${error.message}`
+              : ' Портрет остался внешней ссылкой.'
+        }
+      }
+
+      updateAdventure((currentAdventure) => ({
+        ...currentAdventure,
+        characters: targetCharacter
+          ? (currentAdventure.characters ?? []).map((currentCharacter) =>
+              currentCharacter.id === targetCharacter.id ? character : currentCharacter,
+            )
+          : [...(currentAdventure.characters ?? []), character],
+      }), targetCharacter ? `Обновлен персонаж: ${character.name}` : `Импортирован персонаж: ${character.name}`)
+      setSelectedCharacterId(character.id)
+      setIsCharacterModalOpen(true)
+      setImportFeedback({
+        tone: imageImportWarning ? 'error' : 'success',
+        text: targetCharacter
+          ? `Персонаж "${character.name}" обновлен.${imageImportWarning}`
+          : `Персонаж "${character.name}" импортирован.${imageImportWarning}`,
+      })
+    } catch (error) {
+      setImportFeedback({
+        tone: 'error',
+        text:
+          error instanceof Error
+            ? error.message
+            : 'Не удалось импортировать персонажа. Проверь JSON-файл.',
+      })
+    } finally {
+      setCharacterImportTargetId(null)
+    }
+  }
+
+  function removeCharacter(characterId: string) {
+    const characterName =
+      adventure?.characters.find((character) => character.id === characterId)?.name ?? 'Персонаж'
+
+    updateAdventure((currentAdventure) => ({
+      ...currentAdventure,
+      characters: (currentAdventure.characters ?? []).filter(
+        (character) => character.id !== characterId,
+      ),
+    }), `Удален персонаж: ${characterName}`)
+
+    if (selectedCharacterId === characterId) {
+      setSelectedCharacterId(null)
+    }
+
+    setIsCharacterModalOpen(false)
+    setPendingCharacterDeleteId(null)
+    setImportFeedback({
+      tone: 'success',
+      text: `Персонаж "${characterName}" удален.`,
+    })
   }
 
 
@@ -24752,14 +23788,6 @@ export function GmWindow() {
 
 
       setSelectedHandoutId(null)
-
-
-
-
-
-
-
-      setSelectedCheckId(null)
 
 
 
@@ -25119,7 +24147,7 @@ export function GmWindow() {
 
 
 
-        label: 'Рмпор‚ирова проект',
+        label: 'Импортирован проект',
 
 
 
@@ -25144,14 +24172,6 @@ export function GmWindow() {
 
 
       setSelectedHandoutId(null)
-
-
-
-
-
-
-
-      setSelectedCheckId(null)
 
 
 
@@ -25279,7 +24299,7 @@ export function GmWindow() {
 
 
 
-            : 'Не удалось импор‚ирова‚ь проект. Проверь JSON-файл Рё попробуй ещё раз.',
+            : 'Не удалось импортировать проект. Проверь JSON-файл и попробуй ещё раз.',
 
 
 
@@ -25319,6 +24339,143 @@ export function GmWindow() {
 
 
 
+  function resetSelectionState(nextSceneId: string) {
+    setActiveSceneId(nextSceneId)
+    setSelectedHandoutId(null)
+    setSelectedMonsterId(null)
+    setSelectedZoneId(null)
+    setCollapsedMonsterIds([])
+    setSelectedAudioId(null)
+    stopAudioPlayback()
+  }
+
+  function applyLoadedProjectState(
+    nextProject: ProjectState,
+    options: {
+      feedbackText: string
+      historyLabel: string
+      skipFeedback?: boolean
+    },
+  ) {
+    const normalizedProject = syncProjectState(nextProject)
+    const nextAdventureId = normalizedProject.activeAdventureId ?? normalizedProject.adventureOrder[0] ?? ''
+    const nextAdventure = nextAdventureId ? normalizedProject.adventures[nextAdventureId] : null
+
+    commitProjectState(normalizedProject, { label: options.historyLabel })
+    resetSelectionState(nextAdventure?.scenes[0]?.id ?? '')
+
+    if (!options.skipFeedback) {
+      setImportFeedback({
+        tone: 'success',
+        text: options.feedbackText,
+      })
+    }
+  }
+
+  function updateAdventureListTitle(adventureId: string, value: string) {
+    updateProjectState((currentState) => {
+      const currentAdventure = currentState.adventures[adventureId]
+
+      if (!currentAdventure || currentAdventure.title === value) {
+        return currentState
+      }
+
+      return {
+        ...currentState,
+        adventures: {
+          ...currentState.adventures,
+          [adventureId]: {
+            ...currentAdventure,
+            title: value,
+          },
+        },
+      }
+    }, 'Изменено название приключения')
+  }
+
+  function renameAdventureListId(adventureId: string, value: string) {
+    updateProjectState((currentState) => {
+      const currentAdventure = currentState.adventures[adventureId]
+      const currentSession = currentState.sessions[adventureId]
+
+      if (!currentAdventure || !currentSession) {
+        return currentState
+      }
+
+      const nextId = createUniqueAdventureId(
+        slugify(value, currentAdventure.id),
+        currentState.adventureOrder.filter((id) => id !== adventureId),
+      )
+
+      if (nextId === adventureId) {
+        return currentState
+      }
+
+      const nextAdventures = { ...currentState.adventures }
+      const nextSessions = { ...currentState.sessions }
+
+      delete nextAdventures[adventureId]
+      delete nextSessions[adventureId]
+
+      nextAdventures[nextId] = {
+        ...currentAdventure,
+        id: nextId,
+      }
+      nextSessions[nextId] = currentSession
+
+      return {
+        ...currentState,
+        activeAdventureId:
+          currentState.activeAdventureId === adventureId ? nextId : currentState.activeAdventureId,
+        adventureOrder: currentState.adventureOrder.map((id) => (id === adventureId ? nextId : id)),
+        adventures: nextAdventures,
+        sessions: nextSessions,
+      }
+    }, 'Изменён id приключения')
+  }
+
+  function startAdventureCardEdit(adventureId: string, field: 'id' | 'title', value: string) {
+    setEditingAdventureField({ adventureId, field })
+    setEditingAdventureValue(value)
+  }
+
+  function stopAdventureCardEdit() {
+    setEditingAdventureField(null)
+    setEditingAdventureValue('')
+  }
+
+  function commitAdventureCardEdit() {
+    if (!editingAdventureField) {
+      return
+    }
+
+    const { adventureId, field } = editingAdventureField
+    const nextValue = editingAdventureValue
+
+    stopAdventureCardEdit()
+
+    if (field === 'id') {
+      renameAdventureListId(adventureId, nextValue)
+      return
+    }
+
+    updateAdventureListTitle(adventureId, nextValue)
+  }
+
+  function handleAdventureCardInputKeyDown(event: ReactKeyboardEvent<HTMLInputElement>) {
+    event.stopPropagation()
+
+    if (event.key === 'Enter') {
+      event.preventDefault()
+      event.currentTarget.blur()
+      return
+    }
+
+    if (event.key === 'Escape') {
+      event.preventDefault()
+      stopAdventureCardEdit()
+    }
+  }
   async function handleProjectImport(file: File | null) {
 
 
@@ -25376,190 +24533,6 @@ export function GmWindow() {
 
 
     commitImportedProject(parsed)
-
-
-
-
-
-
-
-  }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-  async function handleBundledAdventureImport() {
-
-
-
-
-
-
-
-    setImportFeedback(null)
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-    try {
-
-
-
-
-
-
-
-      const response = await fetch(bundledDeathHouseImportPath)
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-      if (!response.ok) {
-
-
-
-
-
-
-
-        throw new Error('Не удалось загрузить встроенный импорт приключения.')
-
-
-
-
-
-
-
-      }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-      const parsed = (await response.json()) as unknown
-
-
-
-
-
-
-
-      commitImportedAdventure(parsed)
-
-
-
-
-
-
-
-    } catch (error) {
-
-
-
-
-
-
-
-      setImportFeedback({
-
-
-
-
-
-
-
-        tone: 'error',
-
-
-
-
-
-
-
-        text:
-
-
-
-
-
-
-
-          error instanceof Error
-
-
-
-
-
-
-
-            ? error.message
-
-
-
-
-
-
-
-            : 'Не удалось загрузить встроенное приключение.',
-
-
-
-
-
-
-
-      })
-
-
-
-
-
-
-
-    }
 
 
 
@@ -25976,6 +24949,9 @@ export function GmWindow() {
 
 
               fogCells: [],
+              hiddenZoneIds: [],
+              mapGrid: normalizeMapGrid(),
+              mapGridVisible: true,
 
 
 
@@ -26777,6 +25753,13 @@ export function GmWindow() {
 
     }), 'Удалена раздатка')
 
+    updateSceneRuntimeState(activeScene.id, (sceneState) => ({
+      ...sceneState,
+      serviceMarkers: sceneState.serviceMarkers.map((marker) =>
+        marker.linkedHandoutId === handoutId ? { ...marker, linkedHandoutId: null } : marker,
+      ),
+    }))
+
 
 
 
@@ -27055,14 +26038,6 @@ export function GmWindow() {
 
 
 
-    setSelectedCheckId(nextEntry.id)
-
-
-
-
-
-
-
   }
 
 
@@ -27297,6 +26272,12 @@ export function GmWindow() {
 
     }), 'Удалена проверка')
 
+    updateSceneRuntimeState(activeScene.id, (sceneState) => ({
+      ...sceneState,
+      serviceMarkers: sceneState.serviceMarkers.map((marker) =>
+        marker.linkedCheckId === entryId ? { ...marker, linkedCheckId: null } : marker,
+      ),
+    }))
 
 
 
@@ -27305,29 +26286,6 @@ export function GmWindow() {
 
 
 
-
-
-
-
-
-
-    setSelectedCheckId((currentEntryId) =>
-
-
-
-
-
-
-
-      currentEntryId === entryId ? null : currentEntryId,
-
-
-
-
-
-
-
-    )
 
 
 
@@ -28975,6 +27933,41 @@ export function GmWindow() {
 
 
 
+  function getMonsterSpawnCount(monsterId: string) {
+    return monsterSpawnCounts[monsterId] ?? newMonsterSpawnCount
+  }
+
+  function updateMonsterSpawnCount(monsterId: string, rawValue: string, fallback: number) {
+    const nextCount = clampSpawnCount(Number(rawValue), fallback)
+
+    setMonsterSpawnCounts((currentCounts) => ({
+      ...currentCounts,
+      [monsterId]: nextCount,
+    }))
+
+    if (monsterId === activeMonster?.id) {
+      setNewMonsterSpawnCount(nextCount)
+    }
+  }
+
+  function selectMonsterForEditing(monsterId: string) {
+    setSelectedMonsterId(monsterId)
+    setNewMonsterSpawnCount(getMonsterSpawnCount(monsterId))
+    setCollapsedMonsterIds((currentIds) => {
+      const nextIds = currentIds.filter((id) => id !== monsterId)
+
+      if (
+        resolvedSelectedMonsterId &&
+        resolvedSelectedMonsterId !== monsterId &&
+        !nextIds.includes(resolvedSelectedMonsterId)
+      ) {
+        nextIds.push(resolvedSelectedMonsterId)
+      }
+
+      return nextIds
+    })
+  }
+
   function addMonsterBlock() {
 
 
@@ -29118,6 +28111,220 @@ export function GmWindow() {
 
 
 
+
+  function cloneMonsterForScene(sourceMonster: MonsterBlock, monsterIds: string[]) {
+    const monsterId = createUniqueCollectionId(sourceMonster.id, monsterIds, 'monster')
+    const imageRef = getMonsterImageRef(sourceMonster)
+
+    return {
+      ...sourceMonster,
+      id: monsterId,
+      imageAssetId: imageRef.kind === 'project-asset' ? imageRef.assetId : (sourceMonster.imageAssetId ?? null),
+      imageSrc: imageRef.kind === 'none' ? null : ('src' in imageRef ? imageRef.src : (sourceMonster.imageSrc ?? null)),
+      traits: sourceMonster.traits.map((feature) => ({
+        ...feature,
+        id: createEntityId('feature'),
+      })),
+      actions: sourceMonster.actions.map((feature) => ({
+        ...feature,
+        id: createEntityId('feature'),
+      })),
+      bonusActions: sourceMonster.bonusActions.map((feature) => ({
+        ...feature,
+        id: createEntityId('feature'),
+      })),
+      reactions: sourceMonster.reactions.map((feature) => ({
+        ...feature,
+        id: createEntityId('feature'),
+      })),
+      legendaryActions: sourceMonster.legendaryActions.map((feature) => ({
+        ...feature,
+        id: createEntityId('feature'),
+      })),
+    }
+  }
+
+  function cloneMonsterForLibrary(sourceMonster: MonsterBlock, monsterIds: string[]) {
+    const imageRef = getMonsterImageRef(sourceMonster)
+
+    return {
+      ...sourceMonster,
+      id: createUniqueCollectionId(sourceMonster.id || sourceMonster.name, monsterIds, 'monster'),
+      imageAssetId: imageRef.kind === 'project-asset' ? imageRef.assetId : null,
+      imageSrc: imageRef.kind === 'none' ? null : ('src' in imageRef ? imageRef.src : (sourceMonster.imageSrc ?? null)),
+    }
+  }
+
+  function saveMonsterToLibrary(monster: MonsterBlock) {
+    updateProjectState((currentState) => {
+      const existingMonsterIndex = currentState.monsterLibrary.findIndex(
+        (libraryMonster) => libraryMonster.id === monster.id,
+      )
+      const imageRef = getMonsterImageRef(monster)
+      const nextMonster = {
+        ...monster,
+        imageAssetId: imageRef.kind === 'project-asset' ? imageRef.assetId : null,
+        imageSrc: imageRef.kind === 'none' ? null : ('src' in imageRef ? imageRef.src : (monster.imageSrc ?? null)),
+      }
+
+      if (existingMonsterIndex >= 0) {
+        return {
+          ...currentState,
+          monsterLibrary: currentState.monsterLibrary.map((libraryMonster, index) =>
+            index === existingMonsterIndex ? nextMonster : libraryMonster,
+          ),
+        }
+      }
+
+      return {
+        ...currentState,
+        monsterLibrary: [
+          ...currentState.monsterLibrary,
+          cloneMonsterForLibrary(
+            monster,
+            currentState.monsterLibrary.map((libraryMonster) => libraryMonster.id),
+          ),
+        ],
+      }
+    }, `Монстр сохранен в библиотеку: ${monster.name}`)
+    setImportFeedback({
+      tone: 'success',
+      text: `Монстр "${monster.name}" сохранен в общую библиотеку.`,
+    })
+  }
+
+  function removeMonsterFromLibrary(monsterId: string) {
+    const monsterName =
+      projectState.monsterLibrary.find((monster) => monster.id === monsterId)?.name ?? 'Монстр'
+
+    updateProjectState((currentState) => ({
+      ...currentState,
+      monsterLibrary: currentState.monsterLibrary.filter((monster) => monster.id !== monsterId),
+    }), `Монстр удален из библиотеки: ${monsterName}`)
+    setPendingMonsterLibraryDeleteId(null)
+    setImportFeedback({
+      tone: 'success',
+      text: `Монстр "${monsterName}" удален из общей библиотеки.`,
+    })
+  }
+
+  function addMonsterFromLibrary(sourceMonsterId: string) {
+    if (!activeScene || !sourceMonsterId) {
+      return
+    }
+
+    const sourceMonster = projectState.monsterLibrary.find((monster) => monster.id === sourceMonsterId)
+
+    if (!sourceMonster) {
+      return
+    }
+
+    const monsterBlock = cloneMonsterForScene(
+      sourceMonster,
+      activeScene.monsterBlocks.map((monster) => monster.id),
+    )
+
+    updateScene(activeScene.id, (scene) => ({
+      ...scene,
+      monsterBlocks: [...scene.monsterBlocks, monsterBlock],
+    }), 'Добавлен монстр из библиотеки')
+
+    setSelectedMonsterId(monsterBlock.id)
+    setCollapsedMonsterIds((currentIds) =>
+      currentIds.filter((id) => id !== monsterBlock.id),
+    )
+    setIsMonsterLibraryDropdownOpen(false)
+    setMonsterLibrarySearch('')
+  }
+
+  function addMonsterFromBestiary(sourceMonster: MonsterBlock) {
+    if (!activeScene) {
+      return
+    }
+
+    const monsterBlock = cloneMonsterForScene(
+      sourceMonster,
+      activeScene.monsterBlocks.map((monster) => monster.id),
+    )
+
+    updateScene(activeScene.id, (scene) => ({
+      ...scene,
+      monsterBlocks: [...scene.monsterBlocks, monsterBlock],
+    }), 'Добавлен монстр из бестиария')
+
+    setSelectedMonsterId(monsterBlock.id)
+    setCollapsedMonsterIds((currentIds) =>
+      currentIds.filter((id) => id !== monsterBlock.id),
+    )
+    setImportFeedback({
+      tone: 'success',
+      text: `Монстр "${monsterBlock.name}" добавлен из бестиария.`,
+    })
+  }
+
+  function triggerMonsterImport() {
+    setImportFeedback(null)
+    if (monsterImportFileInputRef.current) {
+      monsterImportFileInputRef.current.value = ''
+      monsterImportFileInputRef.current.click()
+    }
+  }
+
+  async function handleMonsterImport(file: File | null) {
+    if (!file || !activeScene) {
+      return
+    }
+
+    try {
+      const parsed = JSON.parse(await file.text()) as unknown
+      const monsterBlock = createMonsterBlockFromFoundryActor(
+        parsed,
+        activeScene.monsterBlocks.map((monster) => monster.id),
+      )
+      let imageImportWarning = ''
+
+      if (monsterBlock.imageSrc && /^https?:\/\//i.test(monsterBlock.imageSrc)) {
+        try {
+          const imageAsset = await addUrlAssetToAdventure(
+            monsterBlock.imageSrc,
+            'image',
+            monsterBlock.name,
+          )
+
+          if (imageAsset) {
+            monsterBlock.imageAssetId = imageAsset.id
+            monsterBlock.imageSrc = imageAsset.dataUrl
+          }
+        } catch (error) {
+          imageImportWarning =
+            error instanceof Error
+              ? ` Изображение осталось внешней ссылкой: ${error.message}`
+              : ' Изображение осталось внешней ссылкой.'
+        }
+      }
+
+      updateScene(activeScene.id, (scene) => ({
+        ...scene,
+        monsterBlocks: [...scene.monsterBlocks, monsterBlock],
+      }), `Импортирован монстр: ${monsterBlock.name}`)
+      setSelectedMonsterId(monsterBlock.id)
+      setCollapsedMonsterIds((currentIds) =>
+        currentIds.filter((id) => id !== monsterBlock.id),
+      )
+      setImportFeedback({
+        tone: imageImportWarning ? 'error' : 'success',
+        text: `Монстр "${monsterBlock.name}" импортирован.${imageImportWarning}`,
+      })
+    } catch (error) {
+      setImportFeedback({
+        tone: 'error',
+        text:
+          error instanceof Error
+            ? error.message
+            : 'Не удалось импортировать монстра. Проверь JSON-файл.',
+      })
+    }
+  }
 
   function removeMonsterBlock(monsterId: string) {
 
@@ -30808,14 +30015,9 @@ export function GmWindow() {
 
 
           <button
-
-
-
-
-
-
-
-            className="ghost-button compact-button"
+            aria-label={`Добавить ${buttonLabel}`}
+            className="ghost-button compact-button token-modal-icon-button monster-section-add-button"
+            data-tooltip={`Добавить ${buttonLabel}`}
 
 
 
@@ -30847,7 +30049,7 @@ export function GmWindow() {
 
 
 
-            Добавить {buttonLabel}
+            <i aria-hidden="true" className="fa-solid fa-plus" />
 
 
 
@@ -30928,14 +30130,9 @@ export function GmWindow() {
 
 
                   <button
-
-
-
-
-
-
-
-                    className="inline-link"
+                    aria-label={`Удалить ${feature.title || buttonLabel}`}
+                    className="ghost-button compact-button token-modal-icon-button monster-feature-delete-button"
+                    data-tooltip="Удалить"
 
 
 
@@ -30967,7 +30164,7 @@ export function GmWindow() {
 
 
 
-                    удалить
+                    <i aria-hidden="true" className="fa-solid fa-xmark" />
 
 
 
@@ -31159,7 +30356,7 @@ export function GmWindow() {
 
 
 
-                    rows={3}
+                    rows={2}
 
 
 
@@ -31223,7 +30420,7 @@ export function GmWindow() {
 
 
 
-          <p className="editor-empty">Р’ этом разделе пока нет записе№.</p>
+          <p className="editor-empty">В этом разделе пока нет записей.</p>
 
 
 
@@ -32551,7 +31748,18 @@ export function GmWindow() {
 
 
 
-      <aside className="panel scene-panel">
+      <div
+        aria-hidden={!isSceneMenuOpen}
+        className={`scene-drawer-root ${isSceneMenuOpen ? 'is-open' : ''}`}
+      >
+        <button
+          aria-label="Закрыть меню приключения"
+          className="scene-drawer-backdrop"
+          onClick={() => setIsSceneMenuOpen(false)}
+          tabIndex={isSceneMenuOpen ? 0 : -1}
+          type="button"
+        />
+        <aside className="panel scene-panel scene-drawer-panel" id="scene-navigation-menu">
 
 
 
@@ -32559,31 +31767,27 @@ export function GmWindow() {
 
 
 
-        <div className="panel-header">
+        <div className="panel-header scene-panel-header">
+          <div className="scene-panel-header-main">
+            <div className="scene-panel-header-copy">
+              <h1>{adventure.title}</h1>
+            </div>
+            <div className="scene-panel-header-actions">
+              <button
 
-
-
-
-
-
-
-          <span className="eyebrow">Приключение</span>
-
-
-
-
-
-
-
-          <h1>{adventure.title}</h1>
-
-
-
-
-
-
-
-          <p>{adventure.subtitle}</p>
+                aria-controls="scene-navigation-menu"
+                aria-expanded={isSceneMenuOpen}
+                aria-label="Закрыть меню"
+                className="scene-menu-close-button scene-menu-icon-button"
+                data-tooltip="Закрыть меню"
+                data-tooltip-placement="left"
+                onClick={() => setIsSceneMenuOpen(false)}
+                type="button"
+              >
+                <i aria-hidden="true" className="fa-solid fa-xmark" />
+              </button>
+            </div>
+          </div>
 
 
 
@@ -32607,431 +31811,263 @@ export function GmWindow() {
 
 
 
-        <div className="editor-stack">
-
-
-
-
-
-
-
-          <div className="editor-card">
-
-
-
-
-
-
-
-            <div className="section-row">
-
-
-
-
-
-
-
-              <span className="eyebrow">Библиотека приключений</span>
-
-
-
-
-
-
-
-              <div className="action-row library-actions">
-
-
-
-
-
-
-
-                <button
-
-
-
-
-
-
-
-                  className="ghost-button compact-button"
-
-
-
-
-
-
-
-                  onClick={() => triggerProjectDownload(projectState)}
-
-
-
-
-
-
-
-                  type="button"
-
-
-
-
-
-
-
+        <div className="scene-drawer-scroll">
+          <div className="editor-stack scene-menu-stack">
+          <div className="editor-card scene-menu-card scene-menu-project-card">
+            <div className="section-row scene-menu-section-row">
+              <div className="scene-menu-section-copy">
+                <div className="scene-menu-heading-row">
+                  <span className="eyebrow">Проект</span>
+                  <div
+                    ref={projectActionsRef}
+                    className={`scene-menu-action-disclosure ${isProjectActionsOpen ? 'is-open' : ''}`}
+                  >
+                    <button
+                      aria-expanded={isProjectActionsOpen}
+                      aria-haspopup="menu"
+                      aria-label={isProjectActionsOpen ? 'Скрыть действия проекта' : 'Показать действия проекта'}
+                      className="scene-menu-header-icon-button scene-menu-icon-button scene-menu-project-toggle-button"
+                      data-tooltip={isProjectActionsOpen ? 'Скрыть действия проекта' : 'Показать действия проекта'}
+                      onClick={() => setIsProjectActionsOpen((currentValue) => !currentValue)}
+                      type="button"
+                    >
+                      <i aria-hidden="true" className="fa-solid fa-gear" />
+                    </button>
+                    <div className="scene-menu-action-flyout" role="menu" aria-label="Действия проекта">
+                      <button
+                        aria-label="Открыть папку проекта"
+                        className="scene-menu-action-button scene-menu-icon-button"
+                        data-tooltip="Открыть папку проекта"
+                        disabled={!isProjectFoldersSupported}
+                        onClick={() => {
+                          setIsProjectActionsOpen(false)
+                          void handleOpenProjectFolder()
+                        }}
+                        role="menuitem"
+                        type="button"
+                      >
+                        <i aria-hidden="true" className="fa-solid fa-folder-open" />
+                      </button>
+                      <button
+                        aria-label={projectDirectoryHandle ? 'Сохранить в папку' : 'Сохранить проект в папку'}
+                        className="scene-menu-action-button scene-menu-icon-button"
+                        data-tooltip={projectDirectoryHandle ? 'Сохранить в папку' : 'Сохранить проект в папку'}
+                        disabled={!isProjectFoldersSupported}
+                        onClick={() => {
+                          setIsProjectActionsOpen(false)
+                          void handleSaveProjectFolder()
+                        }}
+                        role="menuitem"
+                        type="button"
+                      >
+                        <i aria-hidden="true" className="fa-solid fa-floppy-disk" />
+                      </button>
+                      <button
+                        aria-label="Экспортировать проект"
+                        className="scene-menu-action-button scene-menu-icon-button"
+                        data-tooltip="Экспортировать проект"
+                        onClick={() => {
+                          setIsProjectActionsOpen(false)
+                          triggerProjectDownload(projectState)
+                        }}
+                        role="menuitem"
+                        type="button"
+                      >
+                        <i aria-hidden="true" className="fa-solid fa-file-export" />
+                      </button>
+                      <button
+                        aria-label="Импортировать проект"
+                        className="scene-menu-action-button scene-menu-icon-button"
+                        data-tooltip="Импортировать проект"
+                        onClick={() => {
+                          setIsProjectActionsOpen(false)
+                          triggerProjectImport()
+                        }}
+                        role="menuitem"
+                        type="button"
+                      >
+                        <i aria-hidden="true" className="fa-solid fa-file-import" />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+                <p className="scene-menu-section-text">
+                  Импорт, экспорт и быстрые действия с общей библиотекой приключений.
+                </p>
+                <p
+                  className={`scene-menu-project-status is-${projectPersistenceStatus}`}
                 >
-
-
-
-
-
-
-
-                  Экспортировать проект
-
-
-
-
-
-
-
-                </button>
-
-
-
-
-
-
-
-                <button className="ghost-button compact-button" onClick={triggerProjectImport} type="button">
-
-
-
-
-
-
-
-                  Импортировать проект
-
-
-
-
-
-
-
-                </button>
-
-
-
-
-
-
-
-                <button className="ghost-button compact-button" onClick={triggerAdventureImport} type="button">
-
-
-
-
-
-
-
-                  Импортировать приключение
-
-
-
-
-
-
-
-                </button>
-
-
-
-
-
-
-
-                <button className="ghost-button compact-button" onClick={() => void handleBundledAdventureImport()} type="button">
-
-
-
-
-
-
-
-                  Загрузить Дом смерти
-
-
-
-
-
-
-
-                </button>
-
-
-
-
-
-
-
-                <button className="ghost-button compact-button" onClick={addAdventure} type="button">
-
-
-
-
-
-
-
-                  Новое приключение
-
-
-
-
-
-
-
-                </button>
-
-
-
-
-
-
-
+                  {projectPersistenceMessage}
+                </p>
               </div>
-
-
-
-
-
-
-
             </div>
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
             <input
-
-
-
-
-
-
-
               ref={projectImportFileInputRef}
-
-
-
-
-
-
-
               accept=".json,application/json"
-
-
-
-
-
-
-
               className="visually-hidden"
-
-
-
-
-
-
-
               onChange={(event) =>
-
-
-
-
-
-
-
                 void handleProjectImport(event.target.files?.[0] ?? null)
-
-
-
-
-
-
-
               }
-
-
-
-
-
-
-
               type="file"
-
-
-
-
-
-
-
             />
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
             <input
-
-
-
-
-
-
-
               ref={importFileInputRef}
-
-
-
-
-
-
-
               accept=".json,application/json"
-
-
-
-
-
-
-
               className="visually-hidden"
-
-
-
-
-
-
-
               onChange={(event) =>
-
-
-
-
-
-
-
                 void handleAdventureImport(event.target.files?.[0] ?? null)
-
-
-
-
-
-
-
               }
-
-
-
-
-
-
-
               type="file"
-
-
-
-
-
-
-
             />
 
-
-
-
-
-
-
-
-
-
-
-
-
-
+            <input
+              ref={characterImportFileInputRef}
+              accept=".json,application/json"
+              className="visually-hidden"
+              onChange={(event) =>
+                void handleCharacterImport(event.target.files?.[0] ?? null)
+              }
+              type="file"
+            />
 
             {importFeedback ? (
-
-
-
-
-
-
-
               <p className={`feedback-message feedback-${importFeedback.tone}`}>
-
-
-
-
-
-
-
                 {importFeedback.text}
-
-
-
-
-
-
-
               </p>
-
-
-
-
-
-
-
             ) : null}
+          </div>
 
+          <div className="editor-card scene-menu-card">
+            <div className="section-row scene-menu-section-row">
+              <div className="scene-menu-section-copy">
+                <div className="scene-menu-heading-row">
+                  <span className="eyebrow">Библиотека заклинаний</span>
+                  <div className="scene-menu-block-actions">
+                    <button
+                      aria-label="Открыть библиотеку заклинаний"
+                      className="scene-menu-header-icon-button scene-menu-icon-button"
+                      data-tooltip="Открыть библиотеку"
+                      onClick={() => setIsSpellLibraryModalOpen(true)}
+                      type="button"
+                    >
+                      <i aria-hidden="true" className="fa-solid fa-book-open" />
+                    </button>
+                  </div>
+                </div>
+                <p className="scene-menu-section-text">
+                  Встроенный гримуар приложения: {builtInSpellLibrary?.length ?? 'загрузка по запросу'}
+                </p>
+              </div>
+            </div>
+          </div>
 
+          <div className="editor-card scene-menu-card">
+            <div className="section-row scene-menu-section-row">
+              <div className="scene-menu-section-copy">
+                <div className="scene-menu-heading-row">
+                  <span className="eyebrow">Бестиарий</span>
+                  <div className="scene-menu-block-actions">
+                    <button
+                      aria-label="Открыть бестиарий"
+                      className="scene-menu-header-icon-button scene-menu-icon-button"
+                      data-tooltip="Открыть бестиарий"
+                      onClick={() => setIsBestiaryModalOpen(true)}
+                      type="button"
+                    >
+                      <i aria-hidden="true" className="fa-solid fa-dragon" />
+                    </button>
+                  </div>
+                </div>
+                <p className="scene-menu-section-text">
+                  Общий бестиарий приложения: {builtInBestiary?.length ?? 'загрузка по запросу'}
+                </p>
+              </div>
+            </div>
+          </div>
 
+          <div className="editor-card scene-menu-card">
+            <button
+              className="control-group-toggle scene-menu-spoiler-toggle"
+              onClick={() => setIsRecoveryPointsCollapsed((current) => !current)}
+              type="button"
+              aria-expanded={!isRecoveryPointsCollapsed}
+            >
+              <div className="control-group-header">
+                <div className="scene-menu-section-copy">
+                  <div className="scene-menu-heading-row">
+                    <span className="eyebrow">Точки восстановления</span>
+                    <strong className="scene-menu-section-count">{projectSnapshots.length}</strong>
+                  </div>
+                  <p className="scene-menu-section-text">
+                    Отдельные сохранённые состояния проекта, к которым можно вернуться вручную.
+                  </p>
+                </div>
+                <span className={`control-group-chevron ${isRecoveryPointsCollapsed ? 'is-collapsed' : ''}`} aria-hidden="true">
+                  ?
+                </span>
+              </div>
+            </button>
 
+            {!isRecoveryPointsCollapsed ? (
+              <div className="scene-list scene-menu-list scene-menu-collapsible-list">
+                {recentProjectSnapshots.map((snapshot) => (
+                  <button
+                    key={snapshot.id}
+                    className="scene-card scene-menu-entry"
+                    onClick={() => restoreProjectSnapshot(snapshot.id)}
+                    type="button"
+                  >
+                    <span className="scene-card-location">
+                      {new Date(snapshot.timestamp).toLocaleTimeString('ru-RU', {
+                        hour: '2-digit',
+                        minute: '2-digit',
+                      })}
+                    </span>
+                    <strong>{snapshot.label}</strong>
+                    <span className="scene-card-summary">
+                      Нажми, чтобы восстановить это состояние проекта.
+                    </span>
+                  </button>
+                ))}
+              </div>
+            ) : null}
+          </div>
 
+          <div className="editor-card scene-menu-card">
+            <div className="section-row scene-menu-section-row">
+              <div className="scene-menu-section-copy">
+                <div className="scene-menu-heading-row">
+                  <span className="eyebrow">Приключения</span>
+                  <div className="scene-menu-block-actions">
+                    <button
+                      aria-label="Импортировать приключение"
+                      className="scene-menu-header-icon-button scene-menu-icon-button"
+                      data-tooltip="Импортировать приключение"
+                      onClick={triggerAdventureImport}
+                      type="button"
+                    >
+                      <i aria-hidden="true" className="fa-solid fa-scroll" />
+                    </button>
+                    <button
+                      aria-label="Добавить приключение"
+                      className="scene-menu-header-icon-button scene-menu-icon-button"
+                      data-tooltip="Добавить приключение"
+                      onClick={addAdventure}
+                      type="button"
+                    >
+                      <i aria-hidden="true" className="fa-solid fa-plus" />
+                    </button>
+                  </div>
+                </div>
+                <p className="scene-menu-section-text">
+                  Переключай активное приключение и держи библиотеку проекта под рукой.
+                </p>
+              </div>
+            </div>
 
-
-
-
-
-
-
-
-
-
-            <div className="adventure-list">
+            <div className="adventure-list scene-menu-list">
               {projectState.adventureOrder.map((adventureId) => {
                 const listedAdventure = projectState.adventures[adventureId]
 
@@ -33039,58 +32075,218 @@ export function GmWindow() {
                   return null
                 }
 
+                const isEditingAdventureId =
+                  editingAdventureField?.adventureId === adventureId &&
+                  editingAdventureField.field === 'id'
+                const isEditingAdventureTitle =
+                  editingAdventureField?.adventureId === adventureId &&
+                  editingAdventureField.field === 'title'
+
                 return (
-                  <button
+                  <div
                     key={adventureId}
-                    className={`adventure-card ${adventureId === activeAdventureId ? 'active' : ''}`}
-                    onClick={() => switchAdventure(adventureId)}
-                    type="button"
+                    className={`adventure-card scene-menu-entry ${adventureId === activeAdventureId ? 'active' : ''}`}
+                    onClick={() => {
+                      switchAdventure(adventureId)
+                      setIsSceneMenuOpen(false)
+                    }}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter' || event.key === ' ') {
+                        event.preventDefault()
+                        switchAdventure(adventureId)
+                        setIsSceneMenuOpen(false)
+                      }
+                    }}
+                    role="button"
+                    tabIndex={0}
                   >
-                    <span className="scene-card-location">{listedAdventure.id}</span>
-                    <strong>{listedAdventure.title}</strong>
+                    {isEditingAdventureId ? (
+                      <input
+                        autoFocus
+                        className="scene-menu-inline-input scene-menu-inline-input-id"
+                        onBlur={commitAdventureCardEdit}
+                        onChange={(event) => setEditingAdventureValue(event.target.value)}
+                        onClick={(event) => event.stopPropagation()}
+                        onFocus={(event) => event.currentTarget.select()}
+                        onKeyDown={handleAdventureCardInputKeyDown}
+                        value={editingAdventureValue}
+                      />
+                    ) : (
+                      <button
+                        className="scene-menu-inline-edit-trigger scene-card-location"
+                        onClick={(event) => {
+                          event.stopPropagation()
+                          startAdventureCardEdit(adventureId, 'id', listedAdventure.id)
+                        }}
+                        onPointerDown={(event) => event.stopPropagation()}
+                        type="button"
+                      >
+                        {listedAdventure.id}
+                      </button>
+                    )}
+                    {isEditingAdventureTitle ? (
+                      <input
+                        autoFocus
+                        className="scene-menu-inline-input scene-menu-inline-input-title"
+                        onBlur={commitAdventureCardEdit}
+                        onChange={(event) => setEditingAdventureValue(event.target.value)}
+                        onClick={(event) => event.stopPropagation()}
+                        onFocus={(event) => event.currentTarget.select()}
+                        onKeyDown={handleAdventureCardInputKeyDown}
+                        value={editingAdventureValue}
+                      />
+                    ) : (
+                      <button
+                        className="scene-menu-inline-edit-trigger scene-menu-entry-title"
+                        onClick={(event) => {
+                          event.stopPropagation()
+                          startAdventureCardEdit(adventureId, 'title', listedAdventure.title)
+                        }}
+                        onPointerDown={(event) => event.stopPropagation()}
+                        type="button"
+                      >
+                        <strong>{listedAdventure.title}</strong>
+                      </button>
+                    )}
                     <span className="scene-card-summary">{listedAdventure.scenes.length} сцен</span>
-                  </button>
+                  </div>
                 )
               })}
             </div>
+          </div>
 
-            {adventure ? (
-              <div className="info-card">
-                <div className="section-row">
-                  <span className="eyebrow">Сцены</span>
-                  <button className="ghost-button compact-button" onClick={addScene} type="button">
-                    Р”обави‚ь сцену
-                  </button>
-                </div>
-                <div className="scene-list">
-                  {adventure.scenes.map((scene, index) => (
+          <div className="editor-card scene-menu-card">
+            <div className="section-row scene-menu-section-row">
+              <div className="scene-menu-section-copy">
+                <div className="scene-menu-heading-row">
+                  <span className="eyebrow">Персонажи</span>
+                  <div className="scene-menu-block-actions">
                     <button
-                      key={scene.id}
-                      className={`scene-card ${scene.id === activeScene?.id ? 'active' : ''}`}
+                      aria-label="Импортировать персонажа LSS"
+                      className="scene-menu-header-icon-button scene-menu-icon-button"
+                      data-tooltip="Импортировать персонажа LSS"
+                      onClick={triggerCharacterImport}
+                      type="button"
+                    >
+                      <i aria-hidden="true" className="fa-solid fa-user-plus" />
+                    </button>
+                  </div>
+                </div>
+                <p className="scene-menu-section-text">
+                  Общие карточки игроков для всего приключения, отдельно от сцен.
+                </p>
+              </div>
+            </div>
+
+            <div className="scene-list scene-menu-list character-menu-list">
+              {adventure.characters.length > 0 ? (
+                adventure.characters.map((character) => (
+                  <div
+                    className="scene-card scene-menu-entry character-menu-card"
+                    key={character.id}
+                  >
+                    <button
+                      className="character-menu-card-open"
                       onClick={() => {
-                        setActiveSceneId(scene.id)
-                        setActiveEditorTab('scene')
+                        setSelectedCharacterId(character.id)
+                        setIsCharacterModalOpen(true)
                       }}
                       type="button"
                     >
-                      <span className="scene-card-location">
-                        {index + 1}. {scene.location}
+                      {character.avatarSrc ? (
+                        <img alt="" src={character.avatarSrc} />
+                      ) : (
+                        <span className="character-menu-avatar-placeholder">
+                          {character.name.charAt(0).toUpperCase()}
+                        </span>
+                      )}
+                      <span className="character-menu-card-copy">
+                        <strong>{character.name}</strong>
                       </span>
-                      <strong>{scene.title}</strong>
-                      <span className="scene-card-summary">{scene.gmSummary || scene.map.title}</span>
                     </button>
-                  ))}
-                </div>
-              </div>
-            ) : null}
+                    <span className="character-menu-card-actions">
+                      <button
+                        aria-label={`Обновить персонажа ${character.name}`}
+                        className="ghost-button compact-button token-modal-icon-button"
+                        data-tooltip="Обновить из JSON"
+                        onClick={() => triggerCharacterUpdate(character.id)}
+                        type="button"
+                      >
+                        <i aria-hidden="true" className="fa-solid fa-rotate" />
+                      </button>
+                      <button
+                        aria-label={`Удалить персонажа ${character.name}`}
+                        className="ghost-button compact-button token-modal-icon-button"
+                        data-tooltip="Удалить персонажа"
+                        onClick={() => setPendingCharacterDeleteId(character.id)}
+                        type="button"
+                      >
+                        <i aria-hidden="true" className="fa-solid fa-trash" />
+                      </button>
+                    </span>
+                  </div>
+                ))
+              ) : (
+                <p className="editor-empty">Импортируй JSON персонажа из Long Story Short.</p>
+              )}
+            </div>
           </div>
 
+          {adventure ? (
+            <div className="info-card scene-menu-card">
+              <div className="section-row scene-menu-section-row">
+                <div className="scene-menu-section-copy">
+                  <div className="scene-menu-heading-row">
+                    <span className="eyebrow">Сцены</span>
+                    <div className="scene-menu-block-actions">
+                      <button
+                        aria-label="Добавить сцену"
+                        className="scene-menu-header-icon-button scene-menu-icon-button"
+                        data-tooltip="Добавить сцену"
+                        onClick={addScene}
+                        type="button"
+                      >
+                        <i aria-hidden="true" className="fa-solid fa-plus" />
+                      </button>
+                    </div>
+                  </div>
+                  <p className="scene-menu-section-text">
+                    <span>Активное приключение:</span>
+                    <strong className="scene-menu-section-title">{adventure.title}</strong>
+                  </p>
+                </div>
+              </div>
 
-
-
-
-
-
+              <div className="scene-list scene-menu-list">
+                {adventure.scenes.map((scene, index) => (
+                  <button
+                    key={scene.id}
+                    className={`scene-card scene-menu-entry ${scene.id === activeScene?.id ? 'active' : ''}`}
+                    onClick={() => {
+                      setActiveSceneId(scene.id)
+                      setActiveEditorTab('scene')
+                      setIsSceneMenuOpen(false)
+                    }}
+                    type="button"
+                  >
+                    <span className="scene-card-location">
+                      {index + 1}. {scene.location}
+                    </span>
+                    <strong>{scene.title}</strong>
+                    <span className="scene-card-summary">{scene.gmSummary || scene.map.title}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <div className="info-card scene-menu-card">
+              <span className="eyebrow">Сцены</span>
+              <p className="scene-menu-section-text">
+                Сначала выбери или создай приключение, а затем добавляй сцены.
+              </p>
+            </div>
+          )}
+          </div>
         </div>
 
 
@@ -33099,7 +32295,8 @@ export function GmWindow() {
 
 
 
-      </aside>
+        </aside>
+      </div>
 
 
 
@@ -33115,84 +32312,7 @@ export function GmWindow() {
 
 
 
-<section className="panel control-panel">
-
-
-
-
-
-
-
-        <section className="map-board-shell">
-          <div className="control-toolbar" role="toolbar" aria-label="Быстрые де№с‚вия сцены">
-            <button
-              className="toolbar-button toolbar-button-primary"
-              onClick={() => pushSplashToPlayer(activeScene)}
-              type="button"
-              title="Показать splash-экран"
-              aria-label="Показать splash-экран"
-            >
-              <span aria-hidden="true">✦</span>
-            </button>
-            <button
-              className="toolbar-button toolbar-button-primary"
-              onClick={() => pushMapToPlayer(activeScene)}
-              type="button"
-              title="Показать карту игрокам"
-              aria-label="Показать карту игрокам"
-            >
-              <span aria-hidden="true">⌖</span>
-            </button>
-            <button
-              className="toolbar-button toolbar-button-primary"
-              disabled={!getQuickSceneHandout(activeScene)}
-              onClick={() => pushQuickSceneHandout(activeScene)}
-              type="button"
-              title="Показать связанную раздатку"
-              aria-label="Показать связанную раздатку"
-            >
-              <i className="fa-solid fa-note-sticky" aria-hidden="true" />
-            </button>
-            <button
-              className="toolbar-button"
-              onClick={openPlayerWindow}
-              type="button"
-              title="Открыть окно игроков"
-              aria-label="Открыть окно игроков"
-            >
-              <i className="fa-solid fa-up-right-from-square" aria-hidden="true" />
-            </button>
-            <button
-              className="toolbar-button"
-              onClick={setStandby}
-              type="button"
-              title="Пауза"
-              aria-label="Пауза"
-            >
-              <span aria-hidden="true">⏸</span>
-            </button>
-            <button
-              className="toolbar-button"
-              disabled={undoStack.length === 0}
-              onClick={undoLastChange}
-              type="button"
-              title="Отменить"
-              aria-label="Отменить"
-            >
-              <i className="fa-solid fa-rotate-left" aria-hidden="true" />
-            </button>
-            <button
-              className="toolbar-button"
-              disabled={redoStack.length === 0}
-              onClick={redoLastChange}
-              type="button"
-              title="Вернуть"
-              aria-label="Вернуть"
-            >
-              <i className="fa-solid fa-rotate-right" aria-hidden="true" />
-            </button>
-          </div>
-          <section className="map-board-section">
+<section className="control-panel">
           <div
 
 
@@ -33209,7 +32329,7 @@ export function GmWindow() {
 
 
 
-            className={`map-board accent-${activeScene.accent} ${gmVisibleLayers.length > 0 ? 'with-image' : ''} interaction-${mapInteractionMode} ${isMapPanning ? 'is-panning' : ''}`}
+            className={`map-board accent-${activeScene.accent} ${gmVisibleLayers.length > 0 ? 'with-image' : ''} interaction-${mapInteractionMode} ${isMapPanning ? 'is-panning' : ''} ${isServiceMarkerDragging ? 'is-service-marker-dragging' : ''} ${rotatingTokenId ? 'is-token-rotating' : ''}`}
 
 
 
@@ -33226,12 +32346,23 @@ export function GmWindow() {
 
 
           >
-
-
-
-
-
-
+            <div
+              className="map-menu-panel"
+              onClick={(event) => event.stopPropagation()}
+              onPointerDown={(event) => event.stopPropagation()}
+            >
+              <button
+                aria-controls="scene-navigation-menu"
+                aria-expanded={isSceneMenuOpen}
+                aria-label={isSceneMenuOpen ? 'Скрыть меню приключения' : 'Открыть меню приключения'}
+                data-tooltip="Меню приключения"
+                className="scene-menu-toggle-overlay"
+                onClick={() => setIsSceneMenuOpen((currentValue) => !currentValue)}
+                type="button"
+              >
+                <i aria-hidden="true" className="fa-solid fa-bars" />
+              </button>
+            </div>
 
             <div
 
@@ -33241,6 +32372,7 @@ export function GmWindow() {
 
 
 
+              ref={mapTransformLayerRef}
               className="map-transform-layer"
 
 
@@ -33321,7 +32453,10 @@ export function GmWindow() {
 
 
 
-                    style={{ backgroundImage: layer.imageSrc ? `url(${layer.imageSrc})` : undefined }}
+                    style={{
+                      backgroundImage: layer.imageSrc ? `url(${layer.imageSrc})` : undefined,
+                      transform: `scale(${layer.scale}) rotate(${layer.rotation}deg)`,
+                    }}
 
 
 
@@ -33361,143 +32496,16 @@ export function GmWindow() {
 
 
 
-              <div className="map-grid-overlay" />
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-              {activeScene.zones.map((zone) => (
-
-
-
-
-
-
-
-                <button
-
-
-
-
-
-
-
-                  key={zone.id}
-
-
-
-
-
-
-
-                  className={`map-zone ${zone.id === activeZone?.id ? 'active' : ''} ${zone.visibleToPlayers ? 'player-visible' : ''}`}
-
-
-
-
-
-
-
-                  onClick={(event) => {
-
-
-
-
-
-
-
-                    event.stopPropagation()
-
-
-
-
-
-
-
-                    setSelectedZoneId(zone.id)
-
-
-
-
-
-
-
-                    setActiveEditorTab('scene')
-
-
-
-
-
-
-
-                  }}
-
-
-
-
-
-
-
-                  onPointerDown={(event) => beginZoneDrag(zone.id, event)}
-
-
-
-
-
-
-
+              {isMapGridVisible ? (
+                <div
+                  className="map-grid-overlay"
                   style={{
-
-
-
-
-
-
-
-                    left: `${zone.x}%`,
-
-
-
-
-
-
-
-                    top: `${zone.y}%`,
-
-
-
-
-
-
-
-                    width: `${zone.width}%`,
-
-
-
-
-
-
-
-                    height: `${zone.height}%`,
-
-
-
-
-
-
-
+                    backgroundSize: mapGridCellSize
+                      ? `${mapGridCellSize}px ${mapGridCellSize}px`
+                      : `${100 / activeMapGrid.columns}% ${100 / activeMapGrid.rows}%`,
                   }}
+                />
+              ) : null}
 
 
 
@@ -33505,7 +32513,6 @@ export function GmWindow() {
 
 
 
-                  title={zone.note || zone.title}
 
 
 
@@ -33513,39 +32520,194 @@ export function GmWindow() {
 
 
 
-                  type="button"
 
+              {activeScene.zones.map((zone) => {
+                const isActiveZone = zone.id === activeZone?.id
+                const zoneLinkedHandout = zone.linkedHandoutId
+                  ? activeScene.handouts.find((handout) => handout.id === zone.linkedHandoutId) ?? null
+                  : null
+                const zoneLinkedCheck = zone.linkedCheckId
+                  ? activeScene.checksClues.find((entry) => entry.id === zone.linkedCheckId) ?? null
+                  : null
+                const zoneLinkedMonster = zone.linkedMonsterId
+                  ? activeScene.monsterBlocks.find((monster) => monster.id === zone.linkedMonsterId) ?? null
+                  : null
+                const zoneHasFog = isZoneHiddenByFog(zone.id, activeSceneState.hiddenZoneIds)
+                const zoneActionItems = [
+                      {
+                        id: 'handout-open',
+                        icon: 'fa-note-sticky',
+                        title: 'Открыть раздатку',
+                        disabled: !zoneLinkedHandout,
+                        onClick: () => focusZoneLinkedHandout(zone),
+                      },
+                      {
+                        id: 'handout-show',
+                        icon: 'fa-share-from-square',
+                        title: 'Показать раздатку игрокам',
+                        disabled: !zoneLinkedHandout,
+                        onClick: () => showZoneLinkedHandoutToPlayers(zone),
+                        tone: 'primary' as const,
+                      },
+                      {
+                        id: 'check-open',
+                        icon: 'fa-dice-d20',
+                        title: 'Открыть проверку',
+                        disabled: !zoneLinkedCheck,
+                        onClick: () => focusZoneLinkedCheck(zone),
+                      },
+                      {
+                        id: 'monster-open',
+                        icon: 'fa-dragon',
+                        title: 'Открыть монстра',
+                        disabled: !zoneLinkedMonster,
+                        onClick: () => focusZoneLinkedMonster(zone),
+                      },
+                    ]
+                const useCompactZoneTools =
+                  zoneActionItems.length > 0 &&
+                  (zone.width < Math.max(18, zoneActionItems.length * 5.4) || zone.height < 11)
 
+                return (
+                  <div
+                    key={zone.id}
+                    className={`map-zone ${isActiveZone ? 'active' : ''} ${zone.visibleToPlayers ? 'player-visible' : ''} has-visibility-badge`}
+                    onClick={(event) => {
+                      event.stopPropagation()
 
-
-
-
-
-                >
-
-
-
-
-
-
-
-                  <span>{zone.title}</span>
-
-
-
-
-
-
-
-                </button>
-
-
-
-
-
-
-
-              ))}
+                      if (suppressZoneClickRef.current) {
+                        suppressZoneClickRef.current = false
+                        return
+                      }
+                      setOpenCompactZoneToolsZoneId(null)
+                      setSelectedZoneId(zone.id)
+                      setIsZoneModalOpen(true)
+                      setActiveEditorTab('scene')
+                    }}
+                    onPointerDown={(event) => handleZonePointerDown(zone.id, event)}
+                    onPointerLeave={() =>
+                      setHoveredZoneResizeHandle((current) => (current?.zoneId === zone.id ? null : current))
+                    }
+                    onPointerMove={(event) => {
+                      const handle = getZoneResizeHandle(event.currentTarget, event.clientX, event.clientY)
+                      setHoveredZoneResizeHandle((current) =>
+                        current?.zoneId === zone.id && current.handle === handle
+                          ? current
+                          : { zoneId: zone.id, handle },
+                      )
+                    }}
+                    style={{
+                      left: `${zone.x}%`,
+                      top: `${zone.y}%`,
+                      width: `${zone.width}%`,
+                      height: `${zone.height}%`,
+                      cursor: getZoneResizeCursor(
+                        hoveredZoneResizeHandle?.zoneId === zone.id ? hoveredZoneResizeHandle.handle : null,
+                      ),
+                    }}
+                    title={zone.note || zone.title}
+                    role="button"
+                    tabIndex={0}
+                  >
+                    <span>{zone.title}</span>
+                    <span
+                      aria-label={zoneHasFog ? 'Зона скрыта туманом' : 'Зона открыта игрокам'}
+                      className={`token-visibility-badge zone-visibility-badge ${
+                        zoneHasFog ? 'is-hidden' : 'is-visible'
+                      }`}
+                      onClick={(event) => {
+                        event.stopPropagation()
+                        setOpenCompactZoneToolsZoneId(null)
+                        applyFogToZone(zone, zoneHasFog ? 'fog-erase' : 'fog-draw')
+                      }}
+                      onPointerDown={(event) => {
+                        event.stopPropagation()
+                      }}
+                      role="button"
+                      tabIndex={0}
+                      title={zoneHasFog ? 'Открыть зону' : 'Скрыть зону'}
+                    >
+                      <i
+                        aria-hidden="true"
+                        className={`fa-solid ${zoneHasFog ? 'fa-eye-slash' : 'fa-eye'}`}
+                      />
+                    </span>
+                    {zoneActionItems.length > 0 ? (
+                      useCompactZoneTools ? (
+                        <div
+                          className={`map-zone-tools map-zone-tools-compact ${
+                            openCompactZoneToolsZoneId === zone.id ? 'is-open' : ''
+                          }`}
+                        >
+                          <button
+                            aria-label="Инструменты зоны"
+                            className="map-zone-action-button"
+                            aria-expanded={openCompactZoneToolsZoneId === zone.id}
+                            onClick={(event) => {
+                              event.stopPropagation()
+                              setOpenCompactZoneToolsZoneId((current) =>
+                                current === zone.id ? null : zone.id,
+                              )
+                            }}
+                            onPointerDown={(event) => {
+                              event.stopPropagation()
+                            }}
+                            title="Инструменты зоны"
+                            type="button"
+                          >
+                            <i aria-hidden="true" className="fa-solid fa-screwdriver-wrench" />
+                          </button>
+                          <div className="map-zone-tools-flyout">
+                            {zoneActionItems.map((action) => (
+                              <button
+                                key={action.id}
+                                aria-label={action.title}
+                                className={`map-zone-action-button ${action.tone === 'primary' ? 'is-primary' : ''}`}
+                                disabled={action.disabled}
+                                onClick={(event) => {
+                                  event.stopPropagation()
+                                  setOpenCompactZoneToolsZoneId(null)
+                                  action.onClick()
+                                }}
+                                onPointerDown={(event) => {
+                                  event.stopPropagation()
+                                }}
+                                title={action.title}
+                                type="button"
+                              >
+                                <i aria-hidden="true" className={`fa-solid ${action.icon}`} />
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="map-zone-tools">
+                          {zoneActionItems.map((action) => (
+                            <button
+                              key={action.id}
+                              aria-label={action.title}
+                              className={`map-zone-action-button ${action.tone === 'primary' ? 'is-primary' : ''}`}
+                              disabled={action.disabled}
+                              onClick={(event) => {
+                                event.stopPropagation()
+                                setOpenCompactZoneToolsZoneId(null)
+                                action.onClick()
+                              }}
+                              onPointerDown={(event) => {
+                                event.stopPropagation()
+                              }}
+                              title={action.title}
+                              type="button"
+                            >
+                              <i aria-hidden="true" className={`fa-solid ${action.icon}`} />
+                            </button>
+                          ))}
+                        </div>
+                      )
+                    ) : null}
+                  </div>
+                )
+              })}
 
 
 
@@ -33562,6 +32724,13 @@ export function GmWindow() {
 
 
               <div className="fog-layer fog-layer-gm">
+                {hiddenFogZones.map((zone) => (
+                  <div
+                    key={zone.id}
+                    className="fog-zone"
+                    style={getZoneFogStyle(zone)}
+                  />
+                ))}
 
 
 
@@ -33569,7 +32738,7 @@ export function GmWindow() {
 
 
 
-                {activeSceneState.fogCells.map((cellId) => (
+                {effectiveFogCells.map((cellId) => (
 
 
 
@@ -33601,7 +32770,7 @@ export function GmWindow() {
 
 
 
-                    style={getFogCellStyle(cellId)}
+                    style={getFogCellStyle(cellId, activeMapGrid)}
 
 
 
@@ -33723,6 +32892,18 @@ export function GmWindow() {
 
               ) : null}
 
+              {zoneSelectionRect ? (
+                <div
+                  className="zone-selection-rect"
+                  style={{
+                    left: `${zoneSelectionRect.left}%`,
+                    top: `${zoneSelectionRect.top}%`,
+                    width: `${zoneSelectionRect.width}%`,
+                    height: `${zoneSelectionRect.height}%`,
+                  }}
+                />
+              ) : null}
+
 
 
 
@@ -33754,6 +32935,7 @@ export function GmWindow() {
 
 
                   key={token.id}
+                  data-tooltip-disabled="true"
 
 
 
@@ -33761,7 +32943,7 @@ export function GmWindow() {
 
 
 
-                  className={`token token-${token.kind} ${token.hiddenFromPlayers ? 'is-hidden' : ''} ${token.id === activeToken?.id ? 'active' : ''} ${token.id === activeInitiativeToken?.id ? 'active-turn' : ''}`}
+                  className={`token token-${token.kind} ${token.hiddenFromPlayers ? 'is-hidden' : ''} ${token.id === activeToken?.id ? 'active' : ''} ${token.id === activeInitiativeToken?.id ? 'active-turn' : ''} ${token.id === rotatingTokenId ? 'is-rotation-active' : ''}`}
 
 
 
@@ -33779,11 +32961,10 @@ export function GmWindow() {
 
                     event.stopPropagation()
 
-
-
-
-
-
+                    if (suppressTokenClickRef.current) {
+                      suppressTokenClickRef.current = false
+                      return
+                    }
 
                     setSelectedTokenId(token.id)
                     setIsTokenModalOpen(true)
@@ -33795,38 +32976,6 @@ export function GmWindow() {
 
 
                     setActiveInitiativeToken(token.id)
-
-
-
-
-
-
-
-                    if (token.linkedMonsterId) {
-
-
-
-
-
-
-
-                      setSelectedMonsterId(token.linkedMonsterId)
-
-
-
-
-
-
-
-                      setActiveEditorTab('monsters')
-
-
-
-
-
-
-
-                    }
 
 
 
@@ -33874,7 +33023,9 @@ export function GmWindow() {
 
 
 
-                    width: `${token.size}px`,
+                    width: mapGridCellSize
+                      ? `${tokenSpaceFootprints[token.space] * mapGridCellSize}px`
+                      : `${(tokenSpaceFootprints[token.space] / activeMapGrid.columns) * 100}%`,
 
 
 
@@ -33882,7 +33033,6 @@ export function GmWindow() {
 
 
 
-                    height: `${token.size}px`,
 
 
 
@@ -33898,7 +33048,7 @@ export function GmWindow() {
 
 
 
-                    transform: `translate(-50%, -50%) rotate(${token.rotation}deg)`,
+                    transform: `translate(-50%, -50%) rotate(${getTokenRotation(token)}deg)`,
 
 
 
@@ -33906,7 +33056,7 @@ export function GmWindow() {
 
 
 
-                    zIndex: token.zIndex,
+                    zIndex: token.id === activeInitiativeToken?.id ? token.zIndex + 1000 : token.zIndex,
 
 
 
@@ -33922,22 +33072,6 @@ export function GmWindow() {
 
 
 
-                  title={token.name}
-
-
-
-
-
-
-
-                  type="button"
-
-
-
-
-
-
-
                 >
 
 
@@ -33946,7 +33080,37 @@ export function GmWindow() {
 
 
 
-                  <span>{token.name}</span>
+                  <span
+                    aria-label={
+                      token.hiddenFromPlayers
+                        ? 'Фишка скрыта от игроков'
+                        : 'Фишка видима игрокам'
+                    }
+                    className={`token-visibility-badge ${
+                      token.hiddenFromPlayers ? 'is-hidden' : 'is-visible'
+                    }`}
+                    onClick={(event) => {
+                      event.stopPropagation()
+                      suppressTokenClickRef.current = false
+                      updateToken(token.id, (currentToken) => ({
+                        ...currentToken,
+                        hiddenFromPlayers: !currentToken.hiddenFromPlayers,
+                      }))
+                    }}
+                    onPointerDown={(event) => {
+                      event.stopPropagation()
+                    }}
+                    role="button"
+                    tabIndex={0}
+                  >
+                    <i
+                      aria-hidden="true"
+                      className={`fa-solid ${
+                        token.hiddenFromPlayers ? 'fa-eye-slash' : 'fa-eye'
+                      }`}
+                    />
+                  </span>
+                  <span className="token-label">{token.name}</span>
 
 
 
@@ -33978,7 +33142,15 @@ export function GmWindow() {
 
 
 
-              {orderedServiceMarkers.map((marker) => (
+              {orderedServiceMarkers.map((marker) => {
+                const markerLinkedHandout = marker.linkedHandoutId
+                  ? activeScene.handouts.find((handout) => handout.id === marker.linkedHandoutId) ?? null
+                  : null
+                const markerLinkedCheck = marker.linkedCheckId
+                  ? activeScene.checksClues.find((entry) => entry.id === marker.linkedCheckId) ?? null
+                  : null
+
+                return (
 
 
 
@@ -33986,7 +33158,7 @@ export function GmWindow() {
 
 
 
-                <button
+                <div
 
 
 
@@ -34020,11 +33192,10 @@ export function GmWindow() {
 
                     event.stopPropagation()
 
-
-
-
-
-
+                    if (suppressServiceMarkerClickRef.current) {
+                      suppressServiceMarkerClickRef.current = false
+                      return
+                    }
 
                     setSelectedServiceMarkerId(marker.id)
                     setIsServiceMarkerModalOpen(true)
@@ -34062,16 +33233,10 @@ export function GmWindow() {
 
 
 
-                  data-tooltip={marker.note || marker.label}
+                  data-tooltip={isServiceMarkerDragging ? undefined : marker.note || marker.label}
                   aria-label={marker.note ? `${marker.label}: ${marker.note}` : marker.label}
-
-
-
-
-
-
-
-                  type="button"
+                  role="button"
+                  tabIndex={0}
 
 
 
@@ -34087,1287 +33252,41 @@ export function GmWindow() {
 
 
 
-                  <span className="service-marker-icon" aria-hidden="true">✦</span>
-
-
-
-
-
-
-
-                </button>
-
-
-
-
-
-
-
-              ))}
-
-              </div>
-
-            <div
-              className="map-utility-panel"
-              aria-label={'Служебные слои'}
-              onClick={(event) => event.stopPropagation()}
-              onPointerDown={(event) => event.stopPropagation()}
-            >
-              <div className="map-overlay-group">
-                <button className="map-overlay-button" onClick={() => zoomMap(-mapScaleStep)} type="button" data-tooltip={'Умень€РёС‚ь масштаб'} aria-label={'Умень€РёС‚ь масштаб'}>
-                  <span aria-hidden="true">{'в€’'}</span>
-                </button>
-                <button className="map-overlay-button" onClick={resetMapViewport} type="button" data-tooltip={`${'Сбросить вид'} (${Math.round(activeMapViewport.scale * 100)}%)`} aria-label={'Сбросить вид'}>
-                  <span aria-hidden="true">{'◎'}</span>
-                </button>
-                <button className="map-overlay-button" onClick={() => zoomMap(mapScaleStep)} type="button" data-tooltip={'Увели‡РёС‚ь масштаб'} aria-label={'Увели‡РёС‚ь масштаб'}>
-                  <span aria-hidden="true">+</span>
-                </button>
-              </div>
-              <div className="map-overlay-group">
-                <button className={`map-overlay-button ${mapInteractionMode === 'navigate' ? 'active' : ''}`} onClick={() => setMapInteractionMode('navigate')} type="button" data-tooltip={'Навигация'} aria-label={'Навигация'}>
-                  <span aria-hidden="true">{'✥'}</span>
-                </button>
-                <button className={`map-overlay-button ${mapInteractionMode === 'marker' ? 'active' : ''}`} onClick={() => setMapInteractionMode('marker')} type="button" data-tooltip={'Ставить метки'} aria-label={'Ставить метки'}>
-                  <span aria-hidden="true">{'⌖'}</span>
-                </button>
-                <button className={`map-overlay-button ${mapInteractionMode === 'token' ? 'active' : ''}`} onClick={() => setMapInteractionMode('token')} type="button" data-tooltip={'Ставить фишки'} aria-label={'Ставить фишки'}>
-                  <span aria-hidden="true">{'?'}</span>
-                </button>
-                <button className={`map-overlay-button ${mapInteractionMode === 'zone' ? 'active' : ''}`} onClick={() => setMapInteractionMode('zone')} type="button" data-tooltip={'Ставить зоны'} aria-label={'Ставить зоны'}>
-                  <span aria-hidden="true">{'▭'}</span>
-                </button>
-              </div>
-              <div className="map-overlay-group">
-                <button className={`map-overlay-button ${mapInteractionMode === 'fog-draw' ? 'active' : ''}`} onClick={() => setMapInteractionMode('fog-draw')} type="button" data-tooltip={'Рисовать туман'} aria-label={'Рисовать туман'}>
-                  <span aria-hidden="true">{'◼'}</span>
-                </button>
-                <button className={`map-overlay-button ${mapInteractionMode === 'fog-erase' ? 'active' : ''}`} onClick={() => setMapInteractionMode('fog-erase')} type="button" data-tooltip={'Стирать туман'} aria-label={'Стирать туман'}>
-                  <span aria-hidden="true">{'◻'}</span>
-                </button>
-                <button className={`map-overlay-button ${mapInteractionMode === 'fog-area-erase' ? 'active' : ''}`} onClick={() => setMapInteractionMode('fog-area-erase')} type="button" data-tooltip={'Открыть область'} aria-label={'Открыть область'}>
-                  <span aria-hidden="true">{'⬒'}</span>
-                </button>
-                <button className={`map-overlay-button ${mapInteractionMode === 'fog-area-draw' ? 'active' : ''}`} onClick={() => setMapInteractionMode('fog-area-draw')} type="button" data-tooltip={'Скрыть область'} aria-label={'Скрыть область'}>
-                  <span aria-hidden="true">{'⬓'}</span>
-                </button>
-              </div>
-              <div className="map-overlay-group">
-                <button className="map-overlay-button" disabled={!activeScene?.zones.some((zone) => zone.visibleToPlayers)} onClick={() => applyFogToVisibleZones('fog-erase')} type="button" data-tooltip={'Открыть видимые зоны'} aria-label={'Открыть видимые зоны'}>
-                  <i className="fa-solid fa-eye" aria-hidden="true" />
-                </button>
-                <button className="map-overlay-button" disabled={!activeScene?.zones.some((zone) => zone.visibleToPlayers)} onClick={() => applyFogToVisibleZones('fog-draw')} type="button" data-tooltip={'Скрыть видимые зоны'} aria-label={'Скрыть видимые зоны'}>
-                  <i className="fa-solid fa-eye-slash" aria-hidden="true" />
-                </button>
-              </div>
-            </div>
-
-            <div className="map-title-badge" aria-hidden="true">
-              {activeScene.map.title}
-            </div>
-
-
-
-
-
-
-
-          </div>
-          </section>
-        </section>
-
-        <div className="control-content-section">
-          <section className="control-group control-group-prep">
-            <div className="control-group-header">
-              <div className="control-group-copy">
-                <span className="eyebrow">Карта Рё подготовка</span>
-                <p className="editor-hint">
-                  Управляй слоями, масштабом, туманом войны Рё базов‹ми объек‚ами сцены.
-                </p>
-              </div>
-            </div>
-        <div className="utility-grid">
-
-
-
-
-
-
-
-            <label className="upload-card">
-
-
-
-
-
-
-
-              <span className="eyebrow">Загрузка карты</span>
-
-
-
-
-
-
-
-              <strong>Р—амени‚ь изображение карты сцены</strong>
-
-
-
-
-
-
-
-              <input
-
-
-
-
-
-
-
-                accept="image/*"
-
-
-
-
-
-
-
-                onChange={(event) =>
-
-
-
-
-
-
-
-                  void handleMapUpload(event.target.files?.[0] ?? null)
-
-
-
-
-
-
-
-                }
-
-
-
-
-
-
-
-                type="file"
-
-
-
-
-
-
-
-              />
-
-
-
-
-
-
-
-            </label>
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-            <div className="info-card map-utility-legacy-card">
-
-
-
-
-
-
-
-              <span className="eyebrow">Слои карты</span>
-
-
-
-
-
-
-
-              <label className="field">
-
-
-
-
-
-
-
-                <span>Название нового слоя</span>
-
-
-
-
-
-
-
-                <input
-
-
-
-
-
-
-
-                  onChange={(event) => setNewLayerTitle(event.target.value)}
-
-
-
-
-
-
-
-                  placeholder="Например, ловушки или подземный уровень"
-
-
-
-
-
-
-
-                  value={newLayerTitle}
-
-
-
-
-
-
-
-                />
-
-
-
-
-
-
-
-              </label>
-
-
-
-
-
-
-
-              <label className="field">
-
-
-
-
-
-
-
-                <span>Файл слоя</span>
-
-
-
-
-
-
-
-                <input
-
-
-
-
-
-
-
-                  accept="image/*"
-
-
-
-
-
-
-
-                  onChange={(event) =>
-
-
-
-
-
-
-
-                    void handleAdditionalLayerUpload(event.target.files?.[0] ?? null)
-
-
-
-
-
-
-
-                  }
-
-
-
-
-
-
-
-                  type="file"
-
-
-
-
-
-
-
-                />
-
-
-
-
-
-
-
-              </label>
-
-
-
-
-
-
-
-              <div className="layer-list">
-
-
-
-
-
-
-
-                {activeSceneState.mapLayers.map((layer, index) => (
-
-
-
-
-
-
-
+                  <span className="service-marker-icon" aria-hidden="true">?</span>
                   <div
-
-
-
-
-
-
-
-                    className={`layer-row ${layer.id === activeLayer?.id ? 'active' : ''}`}
-
-
-
-
-
-
-
-                    key={layer.id}
-
-
-
-
-
-
-
-                    onClick={() => setSelectedLayerId(layer.id)}
-
-
-
-
-
-
-
+                    className="service-marker-tools"
+                    onClick={(event) => event.stopPropagation()}
                   >
-
-
-
-
-
-
-
-                    <div>
-
-
-
-
-
-
-
-                      <strong>{layer.title}</strong>
-
-
-
-
-
-
-
-                      <span className="scene-card-summary">
-
-
-
-
-
-
-
-                        {index === 0 ? 'Базовый слой' : 'Дополнительный слой'}
-
-
-
-
-
-
-
-                      </span>
-
-
-
-
-
-
-
-                    </div>
-
-
-
-
-
-
-
-                    <div className="layer-controls">
-
-
-
-
-
-
-
-                      <button
-
-
-
-
-
-
-
-                        className={`ghost-button compact-button ${layer.visibleToGm ? 'is-active' : ''}`}
-
-
-
-
-
-
-
-                        onClick={() =>
-
-
-
-
-
-
-
-                          updateActiveSceneMapLayer(layer.id, (currentLayer) => ({
-
-
-
-
-
-
-
-                            ...currentLayer,
-
-
-
-
-
-
-
-                            visibleToGm: !currentLayer.visibleToGm,
-
-
-
-
-
-
-
-                          }))
-
-
-
-
-
-
-
-                        }
-
-
-
-
-
-
-
-                        type="button"
-
-
-
-
-
-
-
-                      >
-
-
-
-
-
-
-
-                        Мастер
-
-
-
-
-
-
-
-                      </button>
-
-
-
-
-
-
-
-                      <button
-
-
-
-
-
-
-
-                        className={`ghost-button compact-button ${layer.visibleToPlayers ? 'is-active' : ''}`}
-
-
-
-
-
-
-
-                        onClick={() =>
-
-
-
-
-
-
-
-                          updateActiveSceneMapLayer(layer.id, (currentLayer) => ({
-
-
-
-
-
-
-
-                            ...currentLayer,
-
-
-
-
-
-
-
-                            visibleToPlayers: !currentLayer.visibleToPlayers,
-
-
-
-
-
-
-
-                          }))
-
-
-
-
-
-
-
-                        }
-
-
-
-
-
-
-
-                        type="button"
-
-
-
-
-
-
-
-                      >
-
-
-
-
-
-
-
-                        Ргроки
-
-
-
-
-
-
-                      </button>
-
-
-
-
-
-
-
-                      {index > 0 ? (
-
-
-
-
-
-
-
-                        <button
-
-
-
-
-
-
-
-                          className="inline-link"
-
-
-
-
-
-
-
-                          onClick={() => removeMapLayer(layer.id)}
-
-
-
-
-
-
-
-                          type="button"
-
-
-
-
-
-
-
-                        >
-
-
-
-
-
-
-
-                          удалить
-
-
-
-
-
-
-
-                        </button>
-
-
-
-
-
-
-
-                      ) : null}
-
-
-
-
-
-
-
-                    </div>
-
-
-
-
-
-
-
-                  </div>
-
-
-
-
-
-
-
-                ))}
-
-
-
-
-
-
-
-              </div>
-
-
-
-
-
-
-
-              {activeLayer ? (
-
-
-
-
-
-
-
-                <div className="editor-card">
-
-
-
-
-
-
-
-                  <div className="section-row">
-
-
-
-
-
-
-
-                    <span className="eyebrow">Выбранный слой</span>
-
-
-
-
-
-
-
-                    {activeLayer.id !== activeSceneState.mapLayers[0]?.id ? (
-
-
-
-
-
-
-
-                      <button
-
-
-
-
-
-
-
-                        className="inline-link"
-
-
-
-
-
-
-
-                        onClick={() => removeMapLayer(activeLayer.id)}
-
-
-
-
-
-
-
-                        type="button"
-
-
-
-
-
-
-
-                      >
-
-
-
-
-
-
-
-                        удали‚ь слой
-
-
-
-
-
-
-
-                      </button>
-
-
-
-
-
-
-
-                    ) : null}
-
-
-
-
-
-
-
-                  </div>
-
-
-
-
-
-
-
-                  <label className="field">
-
-
-
-
-
-
-
-                    <span>Название слоя</span>
-
-
-
-
-
-
-
-                    <input
-
-
-
-
-
-
-
-                      onChange={(event) =>
-
-
-
-
-
-
-
-                        updateActiveSceneMapLayer(activeLayer.id, (layer) => ({
-
-
-
-
-
-
-
-                          ...layer,
-
-
-
-
-
-
-
-                          title: event.target.value,
-
-
-
-
-
-
-
-                        }))
-
-
-
-
-
-
-
-                      }
-
-
-
-
-
-
-
-                      value={activeLayer.title}
-
-
-
-
-
-
-
-                    />
-
-
-
-
-
-
-
-                  </label>
-
-
-
-
-
-
-
-                  <label className="field">
-
-
-
-
-
-
-
-                    <span>Рзображение слоя</span>
-
-
-
-
-
-
-                    <input
-
-
-
-
-
-
-
-                      accept="image/*"
-
-
-
-
-
-
-
-                      onChange={(event) =>
-
-
-
-
-
-
-
-                        void handleLayerImageReplace(
-
-
-
-
-
-
-
-                          activeLayer.id,
-
-
-
-
-
-
-
-                          event.target.files?.[0] ?? null,
-
-
-
-
-
-
-
-                        )
-
-
-
-
-
-
-
-                      }
-
-
-
-
-
-
-
-                      type="file"
-
-
-
-
-
-
-
-                    />
-
-
-
-
-
-
-
-                  </label>
-
-
-
-
-
-
-
-                  <div className="layer-controls">
-
-
-
-
-
-
-
                     <button
-
-
-
-
-
-
-
-                      className={`ghost-button compact-button ${activeLayer.visibleToGm ? 'is-active' : ''}`}
-
-
-
-
-
-
-
-                      onClick={() =>
-
-
-
-
-
-
-
-                        updateActiveSceneMapLayer(activeLayer.id, (layer) => ({
-
-
-
-
-
-
-
-                          ...layer,
-
-
-
-
-
-
-
-                          visibleToGm: !layer.visibleToGm,
-
-
-
-
-
-
-
-                        }))
-
-
-
-
-
-
-
-                      }
-
-
-
-
-
-
-
+                      aria-label="Открыть раздатку"
+                      className={`service-marker-action-button ${markerLinkedHandout ? 'is-active' : 'is-disabled'}`}
+                      disabled={!markerLinkedHandout}
+                      onClick={() => focusLinkedHandout(marker.linkedHandoutId)}
+                      onPointerDown={(event) => event.stopPropagation()}
                       type="button"
-
-
-
-
-
-
-
                     >
-
-
-
-
-
-
-
-                      Р’идно мастеру
-
-
-
-
-
-
-
+                      <i aria-hidden="true" className="fa-solid fa-note-sticky" />
                     </button>
-
-
-
-
-
-
-
                     <button
-
-
-
-
-
-
-
-                      className={`ghost-button compact-button ${activeLayer.visibleToPlayers ? 'is-active' : ''}`}
-
-
-
-
-
-
-
-                      onClick={() =>
-
-
-
-
-
-
-
-                        updateActiveSceneMapLayer(activeLayer.id, (layer) => ({
-
-
-
-
-
-
-
-                          ...layer,
-
-
-
-
-
-
-
-                          visibleToPlayers: !layer.visibleToPlayers,
-
-
-
-
-
-
-
-                        }))
-
-
-
-
-
-
-
-                      }
-
-
-
-
-
-
-
+                      aria-label="Показать раздатку игрокам"
+                      className={`service-marker-action-button is-primary ${markerLinkedHandout ? 'is-active' : 'is-disabled'}`}
+                      disabled={!markerLinkedHandout}
+                      onClick={() => showLinkedHandoutToPlayers(marker.linkedHandoutId)}
+                      onPointerDown={(event) => event.stopPropagation()}
                       type="button"
-
-
-
-
-
-
-
                     >
-
-
-
-
-
-
-
-                      Видно игрокам
-
-
-
-
-
-
-
+                      <i aria-hidden="true" className="fa-solid fa-share-from-square" />
                     </button>
-
-
-
-
-
-
-
+                    <button
+                      aria-label="Открыть проверку"
+                      className={`service-marker-action-button ${markerLinkedCheck ? 'is-active' : 'is-disabled'}`}
+                      disabled={!markerLinkedCheck}
+                      onClick={() => focusLinkedCheck(marker.linkedCheckId)}
+                      onPointerDown={(event) => event.stopPropagation()}
+                      type="button"
+                    >
+                      <i aria-hidden="true" className="fa-solid fa-dice-d20" />
+                    </button>
                   </div>
 
 
@@ -35384,1921 +33303,92 @@ export function GmWindow() {
 
 
 
-              ) : null}
-
-
-
-
-
-
-
-            </div>
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-            <div className="info-card">
-
-
-
-
-
-
-
-              <span className="eyebrow">Служебные слои</span>
-
-
-
-
-
-
-
-              <div className="map-viewport-toolbar">
-
-
-
-
-
-
-
-                <button
-
-
-
-
-
-
-
-                  className="ghost-button compact-button"
-
-
-
-
-
-
-
-                  onClick={() => zoomMap(-mapScaleStep)}
-
-
-
-
-
-
-
-                  type="button"
-
-
-
-
-
-
-
-                >
-
-
-
-
-
-
-
-                  - Масштаб
-
-
-
-
-
-
-
-                </button>
-
-
-
-
-
-
-
-                <button
-
-
-
-
-
-
-
-                  className="ghost-button compact-button"
-
-
-
-
-
-
-
-                  onClick={resetMapViewport}
-
-
-
-
-
-
-
-                  type="button"
-
-
-
-
-
-
-
-                >
-
-
-
-
-
-
-
-                  {Math.round(activeMapViewport.scale * 100)}% · Сбросить
-
-
-
-
-
-
-
-                </button>
-
-
-
-
-
-
-
-                <button
-
-
-
-
-
-
-
-                  className="ghost-button compact-button"
-
-
-
-
-
-
-
-                  onClick={() => zoomMap(mapScaleStep)}
-
-
-
-
-
-
-
-                  type="button"
-
-
-
-
-
-
-
-                >
-
-
-
-
-
-
-
-                  + Масштаб
-
-
-
-
-
-
-
-                </button>
-
-
-
-
-
-
+                )
+              })}
 
               </div>
 
-
-
-
-
-
-
-              <div className="map-tool-grid">
-
-
-
-
-
-
-
-                <button
-
-
-
-
-
-
-
-                  className={`ghost-button compact-button ${mapInteractionMode === 'navigate' ? 'is-active' : ''}`}
-
-
-
-
-
-
-
-                  onClick={() => setMapInteractionMode('navigate')}
-
-
-
-
-
-
-
-                  type="button"
-
-
-
-
-
-
-
-                >
-
-
-
-
-
-
-
-                  Навигация
-
-
-
-
-
-
-
-                </button>
-
-
-
-
-
-
-
-                <button
-
-
-
-
-
-
-
-                  className={`ghost-button compact-button ${mapInteractionMode === 'marker' ? 'is-active' : ''}`}
-
-
-
-
-
-
-
-                  onClick={() => setMapInteractionMode('marker')}
-
-
-
-
-
-
-
-                  type="button"
-
-
-
-
-
-
-
-                >
-
-
-
-
-
-
-
-                  Ставить метки
-
-
-
-
-
-
-
-                </button>
-
-
-
-
-
-
-
-                <button
-
-
-
-
-
-
-
-                  className={`ghost-button compact-button ${mapInteractionMode === 'zone' ? 'is-active' : ''}`}
-
-
-
-
-
-
-
-                  onClick={() => setMapInteractionMode('zone')}
-
-
-
-
-
-
-
-                  type="button"
-
-
-
-
-
-
-
-                >
-
-
-
-
-
-
-
-                  С‚ави‚ь зоны
-
-
-
-
-
-
-
-                </button>
-
-
-
-
-
-
-
-                <button
-
-
-
-
-
-
-
-                  className={`ghost-button compact-button ${mapInteractionMode === 'fog-draw' ? 'is-active' : ''}`}
-
-
-
-
-
-
-
-                  onClick={() => setMapInteractionMode('fog-draw')}
-
-
-
-
-
-
-
-                  type="button"
-
-
-
-
-
-
-
-                >
-
-
-
-
-
-
-
-                  Рисова‚ь туман
-
-
-
-
-
-
-
-                </button>
-
-
-
-
-
-
-
-                <button
-
-
-
-
-
-
-
-                  className={`ghost-button compact-button ${mapInteractionMode === 'fog-erase' ? 'is-active' : ''}`}
-
-
-
-
-
-
-
-                  onClick={() => setMapInteractionMode('fog-erase')}
-
-
-
-
-
-
-
-                  type="button"
-
-
-
-
-
-
-
-                >
-
-
-
-
-
-
-
-                  С‚ира‚ь туман
-
-
-
-
-
-
-
-                </button>
-
-
-
-
-
-
-
-                <button
-
-
-
-
-
-
-
-                  className={`ghost-button compact-button ${mapInteractionMode === 'fog-area-erase' ? 'is-active' : ''}`}
-
-
-
-
-
-
-
-                  onClick={() => setMapInteractionMode('fog-area-erase')}
-
-
-
-
-
-
-
-                  type="button"
-
-
-
-
-
-
-
-                >
-
-
-
-
-
-
-
-                  Открыть область
-
-
-
-
-
-
-
-                </button>
-
-
-
-
-
-
-
-                <button
-
-
-
-
-
-
-
-                  className={`ghost-button compact-button ${mapInteractionMode === 'fog-area-draw' ? 'is-active' : ''}`}
-
-
-
-
-
-
-
-                  onClick={() => setMapInteractionMode('fog-area-draw')}
-
-
-
-
-
-
-
-                  type="button"
-
-
-
-
-
-
-
-                >
-
-
-
-
-
-
-
-                  Скрыть область
-
-
-
-
-
-
-
-                </button>
-
-
-
-
-
-
-
-                <button
-
-
-
-
-
-
-
-                  className="ghost-button compact-button"
-
-
-
-
-
-
-
-                  disabled={!activeScene?.zones.some((zone) => zone.visibleToPlayers)}
-
-
-
-
-
-
-
-                  onClick={() => applyFogToVisibleZones('fog-erase')}
-
-
-
-
-
-
-
-                  type="button"
-
-
-
-
-
-
-
-                >
-
-
-
-
-
-
-
-                  Открыть видим‹е зоны
-
-
-
-
-
-
-
-                </button>
-
-
-
-
-
-
-
-                <button
-
-
-
-
-
-
-
-                  className="ghost-button compact-button"
-
-
-
-
-
-
-
-                  disabled={!activeScene?.zones.some((zone) => zone.visibleToPlayers)}
-
-
-
-
-
-
-
-                  onClick={() => applyFogToVisibleZones('fog-draw')}
-
-
-
-
-
-
-
-                  type="button"
-
-
-
-
-
-
-
-                >
-
-
-
-
-
-
-
-                  Скрыть видим‹е зоны
-
-
-
-
-
-
-
-                </button>
-
-
-
-
-
-
-
-              </div>
-
-
-
-
-
-
-
-              <label className="field service-marker-launcher">
-
-
-
-
-
-
-
-                <span>Подпись служебной о‚ме‚ки</span>
-
-
-
-
-
-
-
-                <input
-
-
-
-
-
-
-
-                  disabled={!activeServiceMarker}
-                  onClick={() => setIsServiceMarkerModalOpen(true)}
-
-
-
-
-
-
-
-                  readOnly
-                  value={activeServiceMarker ? 'Редактировать выбранную отметку' : 'Поставь отметку на карте'}
-
-
-
-
-
-
-
-                />
-
-
-
-
-
-
-
-              </label>
-
-
-
-
-
-
-
-              <label className="field service-marker-legacy-field">
-
-
-
-
-
-
-
-                <span>Заметка мастера</span>
-
-
-
-
-
-
-
-                <textarea
-
-
-
-
-
-
-
-                  onChange={(event) => setNewServiceMarkerNote(event.target.value)}
-
-
-
-
-
-
-
-                  rows={3}
-
-
-
-
-
-
-
-                  value={newServiceMarkerNote}
-
-
-
-
-
-
-
-                />
-
-
-
-
-
-
-
-              </label>
-
-
-
-
-
-
-
-              {activeServiceMarker ? (
-
-
-
-
-
-
-
-                <div className="editor-card service-marker-legacy-card">
-
-
-
-
-
-
-
-                  <div className="section-row">
-
-
-
-
-
-
-
-                    <span className="eyebrow">Выбранная отметка</span>
-
-
-
-
-
-
-
-                    <button
-
-
-
-
-
-
-
-                      className="inline-link"
-
-
-
-
-
-
-
-                      onClick={() => removeServiceMarker(activeServiceMarker.id)}
-
-
-
-
-
-
-
-                      type="button"
-
-
-
-
-
-
-
-                    >
-
-
-
-
-
-
-
-                      удали‚ь отметку
-
-
-
-
-
-
-
-                    </button>
-
-
-
-
-
-
-
-                  </div>
-
-
-
-
-
-
-
-                  <label className="field">
-
-
-
-
-
-
-
-                    <span>Подпись</span>
-
-
-
-
-
-
-
-                    <input
-
-
-
-
-
-
-
-                      onChange={(event) =>
-
-
-
-
-
-
-
-                        updateServiceMarker(activeServiceMarker.id, (marker) => ({
-
-
-
-
-
-
-
-                          ...marker,
-
-
-
-
-
-
-
-                          label: event.target.value,
-
-
-
-
-
-
-
-                        }))
-
-
-
-
-
-
-
-                      }
-
-
-
-
-
-
-
-                      value={activeServiceMarker.label}
-
-
-
-
-
-
-
-                    />
-
-
-
-
-
-
-
-                  </label>
-
-
-
-
-
-
-
-                  <label className="field">
-
-
-
-
-
-
-
-                    <span>Заметка</span>
-
-
-
-
-
-
-
-                    <textarea
-
-
-
-
-
-
-
-                      onChange={(event) =>
-
-
-
-
-
-
-
-                        updateServiceMarker(activeServiceMarker.id, (marker) => ({
-
-
-
-
-
-
-
-                          ...marker,
-
-
-
-
-
-
-
-                          note: event.target.value,
-
-
-
-
-
-
-
-                        }))
-
-
-
-
-
-
-
-                      }
-
-
-
-
-
-
-
-                      rows={3}
-
-
-
-
-
-
-
-                      value={activeServiceMarker.note}
-
-
-
-
-
-
-
-                    />
-
-
-
-
-
-
-
-                  </label>
-
-
-
-
-
-
-
-                  <label className="field">
-
-
-
-
-
-
-
-                    <span>Порядок слоя</span>
-
-
-
-
-
-
-
-                    <input
-
-
-
-
-
-
-
-                      onChange={(event) =>
-
-
-
-
-
-
-
-                        updateServiceMarker(activeServiceMarker.id, (marker) => ({
-
-
-
-
-
-
-
-                          ...marker,
-
-
-
-
-
-
-
-                          zIndex: Number(event.target.value),
-
-
-
-
-
-
-
-                        }))
-
-
-
-
-
-
-
-                      }
-
-
-
-
-
-
-
-                      type="number"
-
-
-
-
-
-
-
-                      value={activeServiceMarker.zIndex}
-
-
-
-
-
-
-
-                    />
-
-
-
-
-
-
-
-                  </label>
-
-
-
-
-
-
-
-                  <div className="layer-controls">
-
-
-
-
-
-
-
-                    <button
-
-
-
-
-
-
-
-                      className="ghost-button compact-button"
-
-
-
-
-
-
-
-                      onClick={() =>
-
-
-
-
-
-
-
-                        updateServiceMarker(activeServiceMarker.id, (marker) => ({
-
-
-
-
-
-
-
-                          ...marker,
-
-
-
-
-
-
-
-                          zIndex: marker.zIndex - 1,
-
-
-
-
-
-
-
-                        }))
-
-
-
-
-
-
-
-                      }
-
-
-
-
-
-
-
-                      type="button"
-
-
-
-
-
-
-
-                    >
-
-
-
-
-
-
-
-                      Ниже
-
-
-
-
-
-
-
-                    </button>
-
-
-
-
-
-
-
-                    <button
-
-
-
-
-
-
-
-                      className="ghost-button compact-button"
-
-
-
-
-
-
-
-                      onClick={() =>
-
-
-
-
-
-
-
-                        updateServiceMarker(activeServiceMarker.id, (marker) => ({
-
-
-
-
-
-
-
-                          ...marker,
-
-
-
-
-
-
-
-                          zIndex: marker.zIndex + 1,
-
-
-
-
-
-
-
-                        }))
-
-
-
-
-
-
-
-                      }
-
-
-
-
-
-
-
-                      type="button"
-
-
-
-
-
-
-
-                    >
-
-
-
-
-
-
-
-                      Выше
-
-
-
-
-
-
-
-                    </button>
-
-
-
-
-
-
-
-                  </div>
-
-
-
-
-
-
-
-                </div>
-
-
-
-
-
-
-
-              ) : null}
-
-
-
-
-
-
-
-              <button
-
-
-
-
-
-
-
-                className="ghost-button compact-button"
-
-
-
-
-
-
-
-                onClick={() =>
-
-
-
-
-
-
-
-                  updateSceneRuntimeState(activeScene.id, (sceneState) => ({
-
-
-
-
-
-
-
-                    ...sceneState,
-
-
-
-
-
-
-
-                    fogCells: [],
-
-
-
-
-
-
-
-                  }), 'Очищен весь туман войны')
-
-
-
-
-
-
-
-                }
-
-
-
-
-
-
-
-                type="button"
-
-
-
-
-
-
-
-              >
-
-
-
-
-
-
-
-                Очистить весь туман
-
-
-
-
-
-
-
-              </button>
-
-
-
-
-
-
-
-            </div>
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-            <div className="token-creator">
-
-
-
-
-
-
-
-              <span className="eyebrow">Создание фишки</span>
-
-
-
-
-
-
-
-              <input
-
-
-
-
-
-
-
-                onChange={(event) => setNewTokenName(event.target.value)}
-
-
-
-
-
-
-
-                placeholder="Рмя С„РёС€ки"
-
-
-
-
-
-
-                value={newTokenName}
-
-
-
-
-
-
-
-              />
-
-
-
-
-
-
-
-              <select
-
-
-
-
-
-
-
-                onChange={(event) => setNewTokenKind(event.target.value as TokenKind)}
-
-
-
-
-
-
-
-                value={newTokenKind}
-
-
-
-
-
-
-
-              >
-
-
-
-
-
-
-
-                <option value="player">Ргрок</option>
-
-
-
-
-
-
-
-                <option value="monster">Монстр</option>
-
-
-
-
-
-
-
-                <option value="npc">NPC</option>
-
-
-
-
-
-
-
-              </select>
-
-
-
-
-
-
-
-              <input
-
-
-
-
-
-
-
-                min="1"
-
-
-
-
-
-
-
-                onChange={(event) =>
-
-
-
-
-
-
-
-                  setNewTokenCount(clampSpawnCount(Number(event.target.value), newTokenCount))
-
-
-
-
-
-
-
-                }
-
-
-
-
-
-
-
-                placeholder="Количество"
-
-
-
-
-
-
-
-                type="number"
-
-
-
-
-
-
-
-                value={newTokenCount}
-
-
-
-
-
-
-
-              />
-
-
-
-
-
-
-
-              <input
-
-
-
-
-
-
-
-                accept="image/*"
-
-
-
-
-
-
-
-                onChange={(event) => setNewTokenFile(event.target.files?.[0] ?? null)}
-
-
-
-
-
-
-
-                type="file"
-
-
-
-
-
-
-
-              />
-
-
-
-
-
-
-
-              <button
-
-
-
-
-
-
-
-                className="primary-button"
-
-
-
-
-
-
-
-                onClick={() => void handleCreateToken()}
-
-
-
-
-
-
-
-                type="button"
-
-
-
-
-
-
-
-              >
-
-
-
-
-
-
-
-                {newTokenCount > 1 ? 'Создать группу фишек' : 'Создать фишку'}
-
-
-
-
-
-
-
-              </button>
-
-
-
-
-
-
-
-            </div>
-
-
-
-
-
-
+            <MapUtilityPanel
+              activeMapScale={activeMapViewport.scale}
+              hasFog={activeSceneState.fogCells.length > 0 || activeSceneState.hiddenZoneIds.length > 0}
+              isGmNotesVisible={isGmNotesVisible}
+              isInitiativeTrackerVisible={isInitiativeTrackerVisible}
+              mapInteractionMode={mapInteractionMode}
+              mapScaleStep={mapScaleStep}
+              onClearAllFog={clearAllFog}
+              onResetMapViewport={resetMapViewport}
+              onSetMapInteractionMode={setMapInteractionMode}
+              onToggleGmNotes={() => setIsGmNotesVisible((currentValue) => !currentValue)}
+              onToggleInitiativeTracker={() => setIsInitiativeTrackerVisible((currentValue) => !currentValue)}
+              onZoomMap={zoomMap}
+            />
+
+            <GmNotesPanel
+              isVisible={isGmNotesVisible}
+              onClose={() => setIsGmNotesVisible(false)}
+              scene={activeScene}
+            />
+
+            <MapCornerPanel
+              isMapGridVisible={isMapGridVisible}
+              onOpenGridSettings={() => setIsMapGridModalOpen(true)}
+              onOpenLayerSettings={() => setIsMapLayersModalOpen(true)}
+              onToggleMapGridVisibility={toggleMapGridVisibility}
+              onUpdateMapLayer={updateActiveSceneMapLayer}
+              quickMapLayer={quickMapLayer ?? null}
+            />
+
+            <MapTitleBadge
+              audioLabel={activeAudioTrack ? `${isAudioPlaying ? "Играет" : "Пауза"}: ${activeAudioTrack.title}` : "Аудио не выбрано"}
+              canRedo={redoStack.length > 0}
+              canShowQuickHandout={Boolean(quickSceneHandout)}
+              canUndo={undoStack.length > 0}
+              isPlayerShowingActiveMap={isPlayerShowingActiveMap}
+              isPlayerShowingActiveSplash={isPlayerShowingActiveSplash}
+              isPlayerShowingQuickHandout={isPlayerShowingQuickHandout}
+              mapTitle={activeScene.map.title}
+              materialLabel={
+                sessionState?.playerDisplay.mode === "splash"
+                  ? currentPlayerSplash?.title ?? "Splash не настроен"
+                  : currentPlayerHandout?.title ?? "Раздатка не выбрана"
+              }
+              onOpenMapParams={() => setIsMapParamsModalOpen(true)}
+              onOpenPlayerWindow={openPlayerWindow}
+              onPushMapToPlayer={() => pushMapToPlayer(activeScene)}
+              onPushQuickHandout={() => pushQuickSceneHandout(activeScene)}
+              onPushSplashToPlayer={() => pushSplashToPlayer(activeScene)}
+              onRedo={redoLastChange}
+              onSetStandby={setStandby}
+              onUndo={undoLastChange}
+              playerModeLabel={effectivePlayerModeLabel}
+              playerSceneLabel={currentPlayerScene ? `${currentPlayerScene.title} (${currentPlayerScene.location})` : "Сцена не выбрана"}
+            />
+
+            <SceneEditorActions
+              activeEditorTab={activeEditorTab}
+              containerRef={sceneEditorActionsRef}
+              isModalOpen={isSceneEditorModalOpen}
+              isOpen={isSceneEditorActionsOpen}
+              onOpenSection={openSceneEditorSection}
+              onToggle={() => setIsSceneEditorActionsOpen((currentValue) => !currentValue)}
+              sceneTitle={activeScene.title}
+            />
+
+            <InitiativeTracker
+              focusToken={initiativeTrackerFocusToken}
+              hiddenTokenCount={hiddenInitiativeTrackerTokenCount}
+              isVisible={isInitiativeTrackerVisible}
+              onCycleTurn={cycleInitiativeTurn}
+              onOpenToken={(tokenId) => {
+                setSelectedTokenId(tokenId)
+                setActiveInitiativeToken(tokenId)
+                setIsTokenModalOpen(true)
+              }}
+              tokens={initiativeTrackerVisibleTokens}
+            />
 
           </div>
-          </section>
+
 
 
 
@@ -37329,7 +33419,7 @@ export function GmWindow() {
                   </p>
                 </div>
                 <span className={`control-group-chevron ${isLiveToolsCollapsed ? 'is-collapsed' : ''}`} aria-hidden="true">
-                  ▾
+                  ?
                 </span>
               </div>
             </button>
@@ -37367,134 +33457,6 @@ export function GmWindow() {
 
 
               <div className="editor-stack">
-
-
-
-
-
-
-
-                <div className="action-row zone-action-row">
-
-
-
-
-
-
-
-                  <button
-
-
-
-
-
-
-
-                    className="ghost-button compact-button"
-
-
-
-
-
-
-
-                    onClick={() => cycleInitiativeTurn('previous')}
-
-
-
-
-
-
-
-                    type="button"
-
-
-
-
-
-
-
-                  >
-
-
-
-
-
-
-
-                    Назад
-
-
-
-
-
-
-
-                  </button>
-
-
-
-
-
-
-
-                  <button
-
-
-
-
-
-
-
-                    className="ghost-button compact-button"
-
-
-
-
-
-
-
-                    onClick={() => cycleInitiativeTurn('next')}
-
-
-
-
-
-
-
-                    type="button"
-
-
-
-
-
-
-
-                  >
-
-
-
-
-
-
-
-                    Следующий
-
-
-
-
-
-
-
-                  </button>
-
-
-
-
-
-
-
-                </div>
 
 
 
@@ -37622,7 +33584,6 @@ export function GmWindow() {
 
 
 
-                        <span>{tokenKindLabels[token.kind]}</span>
 
 
 
@@ -37744,12 +33705,6 @@ export function GmWindow() {
 
           </article>
 
-
-
-
-
-
-
           <article className="info-card">
 
 
@@ -37822,296 +33777,6 @@ export function GmWindow() {
 
 
 
-          <article className="info-card">
-
-
-
-
-
-
-
-            <span className="eyebrow">Список фишек</span>
-
-
-
-
-
-
-
-            <ul className="flat-list">
-
-
-
-
-
-
-
-              {activeSceneState.tokens.length > 0 ? (
-
-
-
-
-
-
-
-                activeSceneState.tokens.map((token) => (
-
-
-
-
-
-
-
-                  <li key={token.id}>
-
-
-
-
-
-
-
-                    <button
-
-
-
-
-
-
-
-                      className="inline-link"
-
-
-
-
-
-
-
-                      onClick={() => {
-
-
-
-
-
-
-
-                        setSelectedTokenId(token.id)
-
-
-
-
-
-
-
-                        setActiveInitiativeToken(token.id)
-
-
-
-
-
-
-
-                      }}
-
-
-
-
-
-
-
-                      type="button"
-
-
-
-
-
-
-
-                    >
-
-
-
-
-
-
-
-                      {token.name}
-
-
-
-
-
-
-
-                    </button>
-
-
-
-
-
-
-
-                    <span>{tokenKindLabels[token.kind]}</span>
-
-
-
-
-
-
-
-                    <span>{token.groupLabel ? `Группа: ${token.groupLabel}` : 'Без группы'}</span>
-
-
-
-
-
-
-
-                    <span>
-
-
-
-
-
-
-
-                      ХП {token.hitPointsCurrent ?? '—'}/{token.hitPointsMax ?? '—'} • Инициатива{' '}
-
-
-
-
-
-
-
-                      {token.initiative ?? '—'}
-
-
-
-
-
-
-
-                    </span>
-
-
-
-
-
-
-
-                    <span>{token.hiddenFromPlayers ? 'Скрыт от игроков' : 'Виден игрокам'}</span>
-
-
-
-
-
-
-
-                    <button
-
-
-
-
-
-
-
-                      className="inline-link"
-
-
-
-
-
-
-
-                      onClick={() => removeToken(token.id)}
-
-
-
-
-
-
-
-                      type="button"
-
-
-
-
-
-
-
-                    >
-
-
-
-
-
-
-
-                      удалить
-
-
-
-
-
-
-
-                    </button>
-
-
-
-
-
-
-
-                  </li>
-
-
-
-
-
-
-
-                ))
-
-
-
-
-
-
-
-              ) : (
-
-
-
-
-
-
-
-                <li>Для этой сцены пока нет С„РёС€е.</li>
-
-
-
-
-
-
-
-              )}
-
-
-
-
-
-
-
-            </ul>
-
-
-
-
-
-
-
-          </article>
-
 
 
 
@@ -38134,7 +33799,7 @@ export function GmWindow() {
 
 
 
-            <span className="eyebrow">Выбранная С„РёС€ка</span>
+            <span className="eyebrow">Выбранная фишка</span>
 
 
 
@@ -38270,7 +33935,7 @@ export function GmWindow() {
 
 
 
-                  <select
+                  <StyledSelect
 
 
 
@@ -38320,6 +33985,16 @@ export function GmWindow() {
 
                           event.target.value === 'monster' ? token.linkedMonsterId : null,
 
+                        linkedCharacterId:
+
+
+
+
+
+
+
+                          event.target.value === 'player' ? token.linkedCharacterId : null,
+
 
 
 
@@ -38358,7 +34033,7 @@ export function GmWindow() {
 
 
 
-                    <option value="player">Ргрок</option>
+                    <option value="player">Игрок</option>
 
 
 
@@ -38382,7 +34057,7 @@ export function GmWindow() {
 
 
 
-                  </select>
+                  </StyledSelect>
 
 
 
@@ -38502,118 +34177,23 @@ export function GmWindow() {
 
 
 
-                <label className="field range-field">
-
-
-
-
-
-
-
-                  <span>Размер: {activeToken.size}px</span>
-
-
-
-
-
-
-
-                  <input
-
-
-
-
-
-
-
-                    max="144"
-
-
-
-
-
-
-
-                    min="40"
-
-
-
-
-
-
-
+                <label className="field">
+                  <span>Пространство</span>
+                  <StyledSelect
                     onChange={(event) =>
-
-
-
-
-
-
-
                       updateToken(activeToken.id, (token) => ({
-
-
-
-
-
-
-
                         ...token,
-
-
-
-
-
-
-
-                        size: Number(event.target.value),
-
-
-
-
-
-
-
+                        space: event.target.value as TokenSpace,
                       }))
-
-
-
-
-
-
-
                     }
-
-
-
-
-
-
-
-                    type="range"
-
-
-
-
-
-
-
-                    value={activeToken.size}
-
-
-
-
-
-
-
-                  />
-
-
-
-
-
-
-
+                    value={activeToken.space}
+                  >
+                    {tokenSpaceValues.map((space) => (
+                      <option key={space} value={space}>
+                        {tokenSpaceLabels[space]}
+                      </option>
+                    ))}
+                  </StyledSelect>
                 </label>
 
 
@@ -38622,119 +34202,6 @@ export function GmWindow() {
 
 
 
-                <label className="field range-field">
-
-
-
-
-
-
-
-                  <span>Поворот: {activeToken.rotation}В°</span>
-
-
-
-
-
-
-
-                  <input
-
-
-
-
-
-
-
-                    max="360"
-
-
-
-
-
-
-
-                    min="0"
-
-
-
-
-
-
-
-                    onChange={(event) =>
-
-
-
-
-
-
-
-                      updateToken(activeToken.id, (token) => ({
-
-
-
-
-
-
-
-                        ...token,
-
-
-
-
-
-
-
-                        rotation: Number(event.target.value),
-
-
-
-
-
-
-
-                      }))
-
-
-
-
-
-
-
-                    }
-
-
-
-
-
-
-
-                    type="range"
-
-
-
-
-
-
-
-                    value={activeToken.rotation}
-
-
-
-
-
-
-
-                  />
-
-
-
-
-
-
-
-                </label>
 
 
 
@@ -38966,7 +34433,7 @@ export function GmWindow() {
 
 
 
-                  <select
+                  <StyledSelect
 
 
 
@@ -39007,6 +34474,8 @@ export function GmWindow() {
 
 
                         linkedMonsterId: event.target.value || null,
+
+                        linkedCharacterId: null,
 
 
 
@@ -39094,7 +34563,7 @@ export function GmWindow() {
 
 
 
-                  </select>
+                  </StyledSelect>
 
 
 
@@ -39734,7 +35203,7 @@ export function GmWindow() {
 
 
 
-                    Копирова‚ь токен
+                    Копировать токен
 
 
 
@@ -39798,7 +35267,7 @@ export function GmWindow() {
 
 
 
-                    Син…ронизирова‚ь с монстром
+                    Синхронизировать с монстром
 
 
 
@@ -39910,12 +35379,6 @@ export function GmWindow() {
 
 
 
-                  type="button"
-
-
-
-
-
 
 
                 >
@@ -40014,7 +35477,7 @@ export function GmWindow() {
 
 
 
-            <span className="eyebrow">Служебные о‚ме‚ки</span>
+            <span className="eyebrow">Служебные отметки</span>
 
 
 
@@ -40110,7 +35573,7 @@ export function GmWindow() {
 
 
 
-                    <span>{marker.note || 'Без заме‚ки'}</span>
+                    <span>{marker.note || 'Без заметки'}</span>
 
 
 
@@ -40233,7 +35696,6 @@ export function GmWindow() {
         </div>
           ) : null}
           </section>
-        </div>
 
 
 
@@ -40256,7 +35718,22 @@ export function GmWindow() {
 
 
 
-      <aside className="panel status-panel editor-panel">
+      {isSceneEditorModalOpen ? (
+        <>
+        <div
+          className="modal-backdrop scene-editor-modal-backdrop"
+          onClick={() => setIsSceneEditorModalOpen(false)}
+          role="presentation"
+        />
+
+      <aside
+        aria-label="Редактор сцены"
+        aria-modal
+        className={`panel status-panel editor-panel scene-editor-panel scene-editor-panel-${activeEditorTab} is-modal-open ${
+          linkedCheckPreviewEntry ? 'is-linked-check-preview' : ''
+        }`}
+        role="dialog"
+      >
 
 
 
@@ -40264,7 +35741,7 @@ export function GmWindow() {
 
 
 
-        <div className="panel-header">
+        <div className="panel-header scene-editor-panel-header">
 
 
 
@@ -40272,7 +35749,10 @@ export function GmWindow() {
 
 
 
-          <span className="eyebrow">Редактор сцены</span>
+          <div className="scene-editor-panel-header-copy">
+            <span className="eyebrow">
+              {linkedCheckPreviewEntry ? 'Связанная проверка' : 'Редактор сцены'}
+            </span>
 
 
 
@@ -40280,7 +35760,67 @@ export function GmWindow() {
 
 
 
-          <h2>{activeScene.title}</h2>
+          {!linkedCheckPreviewEntry ? (
+          <div className="scene-editor-panel-title-row">
+            <h2>
+              {activeEditorTab === 'scene'
+                ? activeScene.title
+                : activeEditorTab === 'splash'
+                  ? 'Splash-экран сцены'
+                  : activeEditorTab === 'checks'
+                    ? 'Проверки и улики'
+                    : editorTabLabels[activeEditorTab]}
+            </h2>
+            {activeEditorTab === 'scene' ? (
+              <button
+                aria-label="Удалить сцену"
+                className="ghost-button compact-button token-modal-icon-button scene-editor-delete-button"
+                data-tooltip="Удалить сцену"
+                onClick={() => removeScene(activeScene.id)}
+                type="button"
+              >
+                <i aria-hidden="true" className="fa-solid fa-trash" />
+              </button>
+            ) : null}
+            {activeEditorTab === 'handouts' ? (
+              <button
+                aria-label="Добавить раздатку"
+                className="ghost-button compact-button token-modal-icon-button"
+                data-tooltip="Добавить раздатку"
+                onClick={addHandout}
+                type="button"
+              >
+                <i aria-hidden="true" className="fa-solid fa-plus" />
+              </button>
+            ) : null}          {activeEditorTab === 'monsters' ? (
+              <span className="scene-editor-panel-title-actions">
+              <button
+                aria-label="Добавить монстра"
+                className="ghost-button compact-button token-modal-icon-button"
+                data-tooltip="Добавить монстра"
+                onClick={addMonsterBlock}
+                type="button"
+              >
+                <i aria-hidden="true" className="fa-solid fa-plus" />
+              </button>
+              <button
+                aria-label="Импортировать монстра"
+                className="ghost-button compact-button token-modal-icon-button"
+                data-tooltip="Импортировать монстра"
+                onClick={triggerMonsterImport}
+                type="button"
+              >
+                <i aria-hidden="true" className="fa-solid fa-file-import" />
+              </button>
+              </span>
+            ) : null}
+            {activeEditorTab === 'audio' ? (
+              <strong className="scene-editor-panel-title-meta">
+                {activeScene.recommendedAudio.length} треков в сцене
+              </strong>
+            ) : null}
+          </div>
+          ) : null}
 
 
 
@@ -40288,7 +35828,16 @@ export function GmWindow() {
 
 
 
-          <p>Редактируй поля, карты, раздатки и боевой контент для текущей сцены.</p>
+          </div>
+
+          <button
+            aria-label="Закрыть редактор сцены"
+            className="ghost-button compact-button token-modal-icon-button"
+            onClick={() => setIsSceneEditorModalOpen(false)}
+            type="button"
+          >
+            <i aria-hidden="true" className="fa-solid fa-xmark" />
+          </button>
 
 
 
@@ -40368,7 +35917,10 @@ export function GmWindow() {
 
 
 
-                onClick={() => setActiveEditorTab(tabId)}
+                onClick={() => {
+                  setLinkedCheckPreviewId(null)
+                  setActiveEditorTab(tabId)
+                }}
 
 
 
@@ -40440,7 +35992,7 @@ export function GmWindow() {
 
 
 
-{activeEditorTab === 'scene' ? (
+{activeEditorTab === 'scene' || activeEditorTab === 'splash' ? (
 
 
 
@@ -40456,7 +36008,7 @@ export function GmWindow() {
 
 
 
-          <div className="editor-card">
+          <div className="scene-editor-fields-card">
 
 
 
@@ -40465,77 +36017,7 @@ export function GmWindow() {
 
 
             <div className="section-row">
-
-
-
-
-
-
-
               <span className="eyebrow">Поля сцены</span>
-
-
-
-
-
-
-
-              <button
-
-
-
-
-
-
-
-                className="inline-link"
-
-
-
-
-
-
-
-                onClick={() => removeScene(activeScene.id)}
-
-
-
-
-
-
-
-                type="button"
-
-
-
-
-
-
-
-              >
-
-
-
-
-
-
-
-                удали‚ь сцену
-
-
-
-
-
-
-
-              </button>
-
-
-
-
-
-
-
             </div>
 
 
@@ -40816,7 +36298,7 @@ export function GmWindow() {
 
 
 
-              <select
+              <StyledSelect
 
 
 
@@ -40952,7 +36434,7 @@ export function GmWindow() {
 
 
 
-              </select>
+              </StyledSelect>
 
 
 
@@ -41080,7 +36562,7 @@ export function GmWindow() {
 
 
 
-              <span>Р—аме‚ки мастера</span>
+              <span>Заметки мастера</span>
 
 
 
@@ -41296,87 +36778,7 @@ export function GmWindow() {
 
 
 
-          <div className="editor-card">
-
-
-
-
-
-
-
-            <div className="section-row">
-
-
-
-
-
-
-
-              <span className="eyebrow">Splash-экран сцены</span>
-
-
-
-
-
-
-
-              <button
-
-
-
-
-
-
-
-                className="ghost-button compact-button"
-
-
-
-
-
-
-
-                onClick={() => pushSplashToPlayer(activeScene)}
-
-
-
-
-
-
-
-                type="button"
-
-
-
-
-
-
-
-              >
-
-
-
-
-
-
-
-                Показать игрока
-
-
-
-
-
-
-
-              </button>
-
-
-
-
-
-
-
-            </div>
+          <div className="editor-card scene-editor-splash-card">
 
 
 
@@ -41752,142 +37154,37 @@ export function GmWindow() {
 
 
 
-            <label className="field">
-
-
-
-
-
-
-
-              <span>Рзображение из библио‚еки</span>
-
-
-
-
-
-
-
-              <select
-
-
-
-
-
-
-
+            <label className="field image-library-select-field">
+              <span>Изображение из библиотеки</span>
+              <StyledSelect
+                className="image-library-select"
                 onChange={(event) => {
-
-
-
-
-
-
-
                   if (event.target.value) {
-
-
-
-
-
-
-
                     applyLibraryImageToSplash(event.target.value)
-
-
-
-
-
-
-
+                    return
                   }
 
-
-
-
-
-
-
+                  clearSplashImage()
                 }}
-
-
-
-
-
-
-
                 value={activeScene.splash.imageAssetId ?? ''}
-
-
-
-
-
-
-
               >
-
-
-
-
-
-
-
                 <option value="">не выбрано</option>
-
-
-
-
-
-
-
                 {imageAssets.map((asset) => (
-
-
-
-
-
-
-
-                  <option key={asset.id} value={asset.id}>
-
-
-
-
-
-
-
-                    {asset.title}
-
-
-
-
-
-
-
+                  <option
+                    data-preview-src={asset.dataUrl}
+                    data-preview-title={asset.title}
+                    key={asset.id}
+                    value={asset.id}
+                  >
+                    <span className="image-select-option">
+                      <span className="image-select-option-title">{asset.title}</span>
+                    </span>
                   </option>
-
-
-
-
-
-
-
                 ))}
-
-
-
-
-
-
-
-              </select>
-
-
-
-
-
-
-
+              </StyledSelect>
+              {imageAssets.length === 0 ? (
+                <p className="editor-empty">В библиотеке приключения пока нет изображений.</p>
+              ) : null}
             </label>
 
 
@@ -41897,85 +37194,36 @@ export function GmWindow() {
 
 
             <label className="field file-field">
-
-
-
-
-
-
-
               <span>Загрузить изображение splash</span>
-
-
-
-
-
-
-
+              <span className="file-upload-row">
+                <span className="file-upload-control">
+                  <span className="file-upload-button" aria-hidden="true">
+                    <i className="fa-solid fa-plus" />
+                  </span>
+                  <span className="file-upload-name">
+                    {getAssetFileLabel(imageAssets, activeScene.splash.imageAssetId, activeScene.splash.imageSrc)}
+                  </span>
+                </span>
+                {resolvedSceneSplashImage ? (
+                  <button
+                    aria-label="Убрать изображение splash"
+                    className="ghost-button compact-button token-modal-icon-button"
+                    onClick={clearSplashImage}
+                    type="button"
+                  >
+                    <i aria-hidden="true" className="fa-solid fa-trash" />
+                  </button>
+                ) : null}
+              </span>
               <input
-
-
-
-
-
-
-
                 accept="image/*"
-
-
-
-
-
-
-
+                className="visually-hidden"
                 onChange={(event) => {
-
-
-
-
-
-
-
                   void handleSplashImageUpload(event.target.files?.[0] ?? null)
-
-
-
-
-
-
-
                   event.target.value = ''
-
-
-
-
-
-
-
                 }}
-
-
-
-
-
-
-
                 type="file"
-
-
-
-
-
-
-
               />
-
-
-
-
-
-
-
             </label>
 
 
@@ -42008,7 +37256,7 @@ export function GmWindow() {
 
 
 
-              <p className="editor-hint">Р•сли изображение не загружено, splash-экран покажет текст Рё атмосферную подложку.</p>
+              <p className="editor-hint">Если изображение не загружено, splash-экран покажет текст и атмосферную подложку.</p>
 
 
 
@@ -42032,7 +37280,7 @@ export function GmWindow() {
 
 
 
-          <div className="editor-card">
+          <div className="editor-card scene-editor-map-card" hidden style={{ display: 'none' }}>
 
 
 
@@ -42296,14 +37544,14 @@ export function GmWindow() {
 
 
 
-              <span>Рс‚о‡ник из библио‚еки</span>
+              <span>Источник из библиотеки</span>
 
 
 
 
 
 
-              <select
+              <StyledSelect
 
 
 
@@ -42415,7 +37663,7 @@ export function GmWindow() {
 
 
 
-              </select>
+              </StyledSelect>
 
 
 
@@ -42439,7 +37687,7 @@ export function GmWindow() {
 
 
 
-              <span>Текст заглу€ки</span>
+              <span>Текст заглушки</span>
 
 
 
@@ -42567,7 +37815,7 @@ export function GmWindow() {
 
 
 
-              <p className="editor-hint">Карта сцены уже связана с библио‚еко№ Рё может переиспользова‚ься в други… сценах.</p>
+              <p className="editor-hint">Карта сцены уже связана с библиотекой и может переиспользоваться в других сценах.</p>
 
 
 
@@ -42584,2380 +37832,26 @@ export function GmWindow() {
 
 
           </div>
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-          <div className="editor-card">
-
-
-
-
-
-
-
-            <div className="section-row">
-
-
-
-
-
-
-
-              <span className="eyebrow">Комнаты Рё зоны</span>
-
-
-
-
-
-
-
-              <strong>{activeScene.zones.length} областей</strong>
-
-
-
-
-
-
-
-            </div>
-
-
-
-
-
-
-
-            <p className="editor-hint">
-
-
-
-
-
-
-
-              Р’ режиме <strong>С‚ави‚ь зоны</strong> кликни по карте, чтобы создать новую область.
-
-
-
-
-
-
-
-            </p>
-
-
-
-
-
-
-
-            <div className="zone-list">
-
-
-
-
-
-
-
-              {activeScene.zones.length > 0 ? (
-
-
-
-
-
-
-
-                activeScene.zones.map((zone) => (
-
-
-
-
-
-
-
-                  <button
-
-
-
-
-
-
-
-                    key={zone.id}
-
-
-
-
-
-
-
-                    className={`zone-card ${zone.id === activeZone?.id ? 'active' : ''}`}
-
-
-
-
-
-
-
-                    onClick={() => setSelectedZoneId(zone.id)}
-
-
-
-
-
-
-
-                    type="button"
-
-
-
-
-
-
-
-                  >
-
-
-
-
-
-
-
-                    <strong>{zone.title}</strong>
-
-
-
-
-
-
-
-                    {zone.linkedHandoutId ? (
-
-
-
-
-
-
-
-                      <span className="scene-card-summary">есть связанная раздатка</span>
-
-
-
-
-
-
-
-                    ) : null}
-
-
-
-
-
-
-
-                    <span className="scene-card-summary">
-
-
-
-
-
-
-
-                      {zone.visibleToPlayers ? 'видно игрокам' : 'только мастер'}
-
-
-
-
-
-
-
-                    </span>
-
-
-
-
-
-
-
-                  </button>
-
-
-
-
-
-
-
-                ))
-
-
-
-
-
-
-
-              ) : (
-
-
-
-
-
-
-
-                <p className="editor-empty">Пока нет ни одной зоны. Создай её кликом по карте.</p>
-
-
-
-
-
-
-
-              )}
-
-
-
-
-
-
-
-            </div>
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-            {activeZone ? (
-
-
-
-
-
-
-
-              <div className="editor-card">
-
-
-
-
-
-
-
-                <div className="section-row">
-
-
-
-
-
-
-
-                  <span className="eyebrow">Выбранная зона</span>
-
-
-
-
-
-
-
-                  <button
-
-
-
-
-
-
-
-                    className="inline-link"
-
-
-
-
-
-
-
-                    onClick={() => removeZone(activeZone.id)}
-
-
-
-
-
-
-
-                    type="button"
-
-
-
-
-
-
-
-                  >
-
-
-
-
-
-
-
-                    удали‚ь зону
-
-
-
-
-
-
-
-                  </button>
-
-
-
-
-
-
-
-                </div>
-
-
-
-
-
-
-
-                <label className="field">
-
-
-
-
-
-
-
-                  <span>Название зоны</span>
-
-
-
-
-
-
-
-                  <input
-
-
-
-
-
-
-
-                    onChange={(event) =>
-
-
-
-
-
-
-
-                      updateZone(activeZone.id, (zone) => ({
-
-
-
-
-
-
-
-                        ...zone,
-
-
-
-
-
-
-
-                        title: event.target.value,
-
-
-
-
-
-
-
-                      }))
-
-
-
-
-
-
-
-                    }
-
-
-
-
-
-
-
-                    value={activeZone.title}
-
-
-
-
-
-
-
-                  />
-
-
-
-
-
-
-
-                </label>
-
-
-
-
-
-
-
-                <label className="field">
-
-
-
-
-
-
-
-                  <span>Заметка мастера</span>
-
-
-
-
-
-
-
-                  <textarea
-
-
-
-
-
-
-
-                    onChange={(event) =>
-
-
-
-
-
-
-
-                      updateZone(activeZone.id, (zone) => ({
-
-
-
-
-
-
-
-                        ...zone,
-
-
-
-
-
-
-
-                        note: event.target.value,
-
-
-
-
-
-
-
-                      }))
-
-
-
-
-
-
-
-                    }
-
-
-
-
-
-
-
-                    rows={3}
-
-
-
-
-
-
-
-                    value={activeZone.note}
-
-
-
-
-
-
-
-                  />
-
-
-
-
-
-
-
-                </label>
-
-
-
-
-
-
-
-                <label className="field">
-
-
-
-
-
-
-
-                  <span>Фокус-заметка зоны</span>
-
-
-
-
-
-
-                  <textarea
-
-
-
-
-
-
-
-                    onChange={(event) =>
-
-
-
-
-
-
-
-                      updateZone(activeZone.id, (zone) => ({
-
-
-
-
-
-
-
-                        ...zone,
-
-
-
-
-
-
-
-                        focusNote: event.target.value,
-
-
-
-
-
-
-
-                      }))
-
-
-
-
-
-
-
-                    }
-
-
-
-
-
-
-
-                    placeholder="Короткая памятка мастеру: что происходит в зоне и на чём держать фокус."
-
-
-
-
-
-
-                    rows={4}
-
-
-
-
-
-
-
-                    value={activeZone.focusNote}
-
-
-
-
-
-
-
-                  />
-
-
-
-
-
-
-
-                </label>
-
-
-
-
-
-
-
-                <label className="field">
-
-
-
-
-
-
-
-                  <span>Связанная раздатка</span>
-
-
-
-
-
-
-
-                  <select
-
-
-
-
-
-
-
-                    onChange={(event) =>
-
-
-
-
-
-
-
-                      updateZone(activeZone.id, (zone) => ({
-
-
-
-
-
-
-
-                        ...zone,
-
-
-
-
-
-
-
-                        linkedHandoutId: event.target.value || null,
-
-
-
-
-
-
-
-                      }))
-
-
-
-
-
-
-
-                    }
-
-
-
-
-
-
-
-                    value={activeZone.linkedHandoutId ?? ''}
-
-
-
-
-
-
-
-                  >
-
-
-
-
-
-
-
-                    <option value="">не привязана</option>
-
-
-
-
-
-
-
-                    {activeScene.handouts.map((handout) => (
-
-
-
-
-
-
-
-                      <option key={handout.id} value={handout.id}>
-
-
-
-
-
-
-
-                        {handout.title}
-
-
-
-
-
-
-
-                      </option>
-
-
-
-
-
-
-
-                    ))}
-
-
-
-
-
-
-
-                  </select>
-
-
-
-
-
-
-
-                </label>
-
-
-
-
-
-
-
-                <label className="field">
-
-
-
-
-
-
-
-                  <span>Связанная проверка или улика</span>
-
-
-
-
-
-
-
-                  <select
-
-
-
-
-
-
-
-                    onChange={(event) =>
-
-
-
-
-
-
-
-                      updateZone(activeZone.id, (zone) => ({
-
-
-
-
-
-
-
-                        ...zone,
-
-
-
-
-
-
-
-                        linkedCheckId: event.target.value || null,
-
-
-
-
-
-
-
-                      }))
-
-
-
-
-
-
-
-                    }
-
-
-
-
-
-
-
-                    value={activeZone.linkedCheckId ?? ''}
-
-
-
-
-
-
-
-                  >
-
-
-
-
-
-
-
-                    <option value="">не привязана</option>
-
-
-
-
-
-
-
-                    {activeScene.checksClues.map((entry) => (
-
-
-
-
-
-
-
-                      <option key={entry.id} value={entry.id}>
-
-
-
-
-
-
-
-                        {entry.ability || 'Без названия'} • {entry.difficulty || 'без сложнос‚Рё'}
-
-
-
-
-
-
-
-                      </option>
-
-
-
-
-
-
-
-                    ))}
-
-
-
-
-
-
-
-                  </select>
-
-
-
-
-
-
-
-                </label>
-
-
-
-
-
-
-
-                <label className="field">
-
-
-
-
-
-
-
-                  <span>Связанный монстр</span>
-
-
-
-
-
-
-
-                  <select
-
-
-
-
-
-
-
-                    onChange={(event) =>
-
-
-
-
-
-
-
-                      updateZone(activeZone.id, (zone) => ({
-
-
-
-
-
-
-
-                        ...zone,
-
-
-
-
-
-
-
-                        linkedMonsterId: event.target.value || null,
-
-
-
-
-
-
-
-                      }))
-
-
-
-
-
-
-
-                    }
-
-
-
-
-
-
-
-                    value={activeZone.linkedMonsterId ?? ''}
-
-
-
-
-
-
-
-                  >
-
-
-
-
-
-
-
-                    <option value="">не привяза</option>
-
-
-
-
-
-
-
-                    {activeScene.monsterBlocks.map((monster) => (
-
-
-
-
-
-
-
-                      <option key={monster.id} value={monster.id}>
-
-
-
-
-
-
-
-                        {monster.name}
-
-
-
-
-
-
-
-                      </option>
-
-
-
-
-
-
-
-                    ))}
-
-
-
-
-
-
-
-                  </select>
-
-
-
-
-
-
-
-                </label>
-
-
-
-
-
-
-
-                <div className="action-row zone-action-row">
-
-
-
-
-
-
-
-                  <button
-
-
-
-
-
-
-
-                    className="ghost-button compact-button"
-
-
-
-
-
-
-
-                    onClick={() => applyFogToZone(activeZone, 'fog-erase')}
-
-
-
-
-
-
-
-                    type="button"
-
-
-
-
-
-
-
-                  >
-
-
-
-
-
-
-
-                    Открыть зону
-
-
-
-
-
-
-
-                  </button>
-
-
-
-
-
-
-
-                  <button
-
-
-
-
-
-
-
-                    className="ghost-button compact-button"
-
-
-
-
-
-
-
-                    onClick={() => applyFogToZone(activeZone, 'fog-draw')}
-
-
-
-
-
-
-
-                    type="button"
-
-
-
-
-
-
-
-                  >
-
-
-
-
-
-
-
-                    Скрыть зону
-
-
-
-
-
-
-
-                  </button>
-
-
-
-
-
-
-
-                </div>
-
-
-
-
-
-
-
-                <div className="action-row zone-action-row">
-
-
-
-
-
-
-
-                  <button
-
-
-
-
-
-
-
-                    className="ghost-button compact-button"
-
-
-
-
-
-
-
-                    disabled={!activeZoneLinkedHandout}
-
-
-
-
-
-
-
-                    onClick={() => focusZoneLinkedHandout(activeZone)}
-
-
-
-
-
-
-
-                    type="button"
-
-
-
-
-
-
-
-                  >
-
-
-
-
-
-
-
-                    Открыть раздатку
-
-
-
-
-
-
-
-                  </button>
-
-
-
-
-
-
-
-                  <button
-
-
-
-
-
-
-
-                    className="primary-button compact-button"
-
-
-
-
-
-
-
-                    disabled={!activeZoneLinkedHandout}
-
-
-
-
-
-
-
-                    onClick={() => showZoneLinkedHandoutToPlayers(activeZone)}
-
-
-
-
-
-
-
-                    type="button"
-
-
-
-
-
-
-
-                  >
-
-
-
-
-
-
-
-                    Показать раздатку игрока
-
-
-
-
-
-
-
-                  </button>
-
-
-
-
-
-
-
-                </div>
-
-
-
-
-
-
-
-                <div className="action-row zone-action-row">
-
-
-
-
-
-
-
-                  <button
-
-
-
-
-
-
-
-                    className="ghost-button compact-button"
-
-
-
-
-
-
-
-                    disabled={!activeZoneLinkedCheck}
-
-
-
-
-
-
-
-                    onClick={() => focusZoneLinkedCheck(activeZone)}
-
-
-
-
-
-
-
-                    type="button"
-
-
-
-
-
-
-
-                  >
-
-
-
-
-
-
-
-                    Открыть проверку
-
-
-
-
-
-
-
-                  </button>
-
-
-
-
-
-
-
-                  <button
-
-
-
-
-
-
-
-                    className="ghost-button compact-button"
-
-
-
-
-
-
-
-                    disabled={!activeZoneLinkedMonster}
-
-
-
-
-
-
-
-                    onClick={() => focusZoneLinkedMonster(activeZone)}
-
-
-
-
-
-
-
-                    type="button"
-
-
-
-
-
-
-
-                  >
-
-
-
-
-
-
-
-                    Открыть монстра
-
-
-
-
-
-
-
-                  </button>
-
-
-
-
-
-
-
-                </div>
-
-
-
-
-
-
-
-                {activeZoneLinkedHandout ? (
-
-
-
-
-
-
-
-                  <p className="editor-hint">
-
-
-
-
-
-
-
-                    Р Р‹Р Р†я Р’·Р Р’°Р Р…Р Р…Р я С‚Р Р’°Р Р’·Р ТР Р’С‚С™Р С”Р В°: <strong>{activeZoneLinkedHandout.title}</strong>
-
-
-
-
-
-
-
-                  </p>
-
-
-
-
-
-
-
-                ) : null}
-
-
-
-
-
-
-
-                {activeZoneLinkedCheck ? (
-
-
-
-
-
-
-
-                  <p className="editor-hint">
-
-
-
-
-
-
-
-                    Связанная проверка: <strong>{activeZoneLinkedCheck.ability || 'Без названия'}</strong>
-
-
-
-
-
-
-
-                  </p>
-
-
-
-
-
-
-
-                ) : null}
-
-
-
-
-
-
-
-                {activeZoneLinkedMonster ? (
-
-
-
-
-
-
-
-                  <p className="editor-hint">
-
-
-
-
-
-
-
-                    Связанный монстр: <strong>{activeZoneLinkedMonster.name}</strong>
-
-
-
-
-
-
-
-                  </p>
-
-
-
-
-
-
-
-                ) : null}
-
-
-
-
-
-
-
-                {activeZone.focusNote ? (
-
-
-
-
-
-
-
-                  <p className="editor-hint">
-
-
-
-
-
-
-
-                    <strong>Фокус:</strong> {activeZone.focusNote}
-
-
-
-
-
-
-
-                  </p>
-
-
-
-
-
-
-
-                ) : null}
-
-
-
-
-
-
-
-                <div className="zone-grid">
-
-
-
-
-
-
-
-                  <label className="field">
-
-
-
-
-
-
-
-                    <span>Позиция X (%)</span>
-
-
-
-
-
-
-
-                    <input
-
-
-
-
-
-
-
-                      onChange={(event) =>
-
-
-
-
-
-
-
-                        updateZone(activeZone.id, (zone) => ({
-
-
-
-
-
-
-
-                          ...zone,
-
-
-
-
-
-
-
-                          x: clampZoneCoordinate(Number(event.target.value), zone.x),
-
-
-
-
-
-
-
-                        }))
-
-
-
-
-
-
-
-                      }
-
-
-
-
-
-
-
-                      type="number"
-
-
-
-
-
-
-
-                      value={activeZone.x}
-
-
-
-
-
-
-
-                    />
-
-
-
-
-
-
-
-                  </label>
-
-
-
-
-
-
-
-                  <label className="field">
-
-
-
-
-
-
-
-                    <span>Позиция Y (%)</span>
-
-
-
-
-
-
-
-                    <input
-
-
-
-
-
-
-
-                      onChange={(event) =>
-
-
-
-
-
-
-
-                        updateZone(activeZone.id, (zone) => ({
-
-
-
-
-
-
-
-                          ...zone,
-
-
-
-
-
-
-
-                          y: clampZoneCoordinate(Number(event.target.value), zone.y),
-
-
-
-
-
-
-
-                        }))
-
-
-
-
-
-
-
-                      }
-
-
-
-
-
-
-
-                      type="number"
-
-
-
-
-
-
-
-                      value={activeZone.y}
-
-
-
-
-
-
-
-                    />
-
-
-
-
-
-
-
-                  </label>
-
-
-
-
-
-
-
-                  <label className="field">
-
-
-
-
-
-
-
-                    <span>Ширина (%)</span>
-
-
-
-
-
-
-
-                    <input
-
-
-
-
-
-
-
-                      onChange={(event) =>
-
-
-
-
-
-
-
-                        updateZone(activeZone.id, (zone) => ({
-
-
-
-
-
-
-
-                          ...zone,
-
-
-
-
-
-
-
-                          width: clampZoneSize(Number(event.target.value), zone.width),
-
-
-
-
-
-
-
-                        }))
-
-
-
-
-
-
-
-                      }
-
-
-
-
-
-
-
-                      type="number"
-
-
-
-
-
-
-
-                      value={activeZone.width}
-
-
-
-
-
-
-
-                    />
-
-
-
-
-
-
-
-                  </label>
-
-
-
-
-
-
-
-                  <label className="field">
-
-
-
-
-
-
-
-                    <span>Высота (%)</span>
-
-
-
-
-
-
-
-                    <input
-
-
-
-
-
-
-
-                      onChange={(event) =>
-
-
-
-
-
-
-
-                        updateZone(activeZone.id, (zone) => ({
-
-
-
-
-
-
-
-                          ...zone,
-
-
-
-
-
-
-
-                          height: clampZoneSize(Number(event.target.value), zone.height),
-
-
-
-
-
-
-
-                        }))
-
-
-
-
-
-
-
-                      }
-
-
-
-
-
-
-
-                      type="number"
-
-
-
-
-
-
-
-                      value={activeZone.height}
-
-
-
-
-
-
-
-                    />
-
-
-
-
-
-
-
-                  </label>
-
-
-
-
-
-
-
-                </div>
-
-
-
-
-
-
-
-                <label className="checkbox-field">
-
-
-
-
-
-
-
-                  <input
-
-
-
-
-
-
-
-                    checked={activeZone.visibleToPlayers}
-
-
-
-
-
-
-
-                    onChange={(event) =>
-
-
-
-
-
-
-
-                      updateZone(activeZone.id, (zone) => ({
-
-
-
-
-
-
-
-                        ...zone,
-
-
-
-
-
-
-
-                        visibleToPlayers: event.target.checked,
-
-
-
-
-
-
-
-                      }))
-
-
-
-
-
-
-
-                    }
-
-
-
-
-
-
-
-                    type="checkbox"
-
-
-
-
-
-
-
-                  />
-
-
-
-
-
-
-
-                  <span>Показывать контур Рё подпись игрока</span>
-
-
-
-
-
-
-
-                </label>
-
-
-
-
-
-
-
-                <label className="checkbox-field">
-
-
-
-
-
-
-
-                  <input
-
-
-
-
-
-
-
-                    checked={activeZone.autoRevealOnEnter}
-
-
-
-
-
-
-
-                    onChange={(event) =>
-
-
-
-
-
-
-
-                      updateZone(activeZone.id, (zone) => ({
-
-
-
-
-
-
-
-                        ...zone,
-
-
-
-
-
-
-
-                        autoRevealOnEnter: event.target.checked,
-
-
-
-
-
-
-
-                      }))
-
-
-
-
-
-
-
-                    }
-
-
-
-
-
-
-
-                    type="checkbox"
-
-
-
-
-
-
-
-                  />
-
-
-
-
-
-
-
-                  <span>Автооткрывать туман при входе С„РёС€ки в зону</span>
-
-
-
-
-
-
-
-                </label>
-
-
-
-
-
-
-
-              </div>
-
-
-
-
-
-
-
-            ) : null}
-
-
-
-
-
-
-
-          </div>
-
-
-
-
-
-
 
           </>
 
-
-
-
-
-
-
           ) : null}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -44974,1031 +37868,16 @@ export function GmWindow() {
 
 
 {activeEditorTab === 'checks' ? (
-
-
-
-
-
-
-
-          <div className="editor-card">
-
-
-
-
-
-
-
-            <div className="section-row">
-
-
-
-
-
-
-
-              <span className="eyebrow">Проверки и улики</span>
-
-
-
-
-
-
-
-              <button
-
-
-
-
-
-
-
-                className="ghost-button compact-button"
-
-
-
-
-
-
-
-                onClick={addCheckClueEntry}
-
-
-
-
-
-
-
-                type="button"
-
-
-
-
-
-
-
-              >
-
-
-
-
-
-
-
-                Р”обави‚ь строку
-
-
-
-
-
-
-
-              </button>
-
-
-
-
-
-
-
-            </div>
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-            {activeCheckClue ? (
-
-
-
-
-
-
-
-              <p className="editor-hint">
-
-
-
-
-
-
-
-                Выбрана строка: <strong>{activeCheckClue.ability || 'Без названия'}</strong>
-
-
-
-
-
-
-
-              </p>
-
-
-
-
-
-
-
-            ) : null}
-
-
-
-
-
-
-
-            {activeScene.checksClues.length > 0 ? (
-
-
-
-
-
-
-
-              <div className="checks-table">
-
-
-
-
-
-
-
-                <div className="checks-row checks-row-header">
-
-
-
-
-
-
-
-                  <span>Характеристика</span>
-
-
-
-
-
-
-
-                  <span>Сложность</span>
-
-
-
-
-
-
-
-                  <span>РС‚ог</span>
-
-
-
-
-
-
-
-                  <span></span>
-
-
-
-
-
-
-
-                </div>
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-                {activeScene.checksClues.map((entry) => (
-
-
-
-
-
-
-
-                  <div
-
-
-
-
-
-
-
-                    className={`checks-row ${entry.id === activeCheckClue?.id ? 'active' : ''}`}
-
-
-
-
-
-
-
-                    key={entry.id}
-
-
-
-
-
-
-
-                    onFocusCapture={() => setSelectedCheckId(entry.id)}
-
-
-
-
-
-
-
-                  >
-
-
-
-
-
-
-
-                    <div className="checks-ability-cell">
-
-
-
-
-
-
-
-                      <select
-
-
-
-
-
-
-
-                        onChange={(event) =>
-
-
-
-
-
-
-
-                          updateCheckClueEntry(entry.id, (currentEntry) => ({
-
-
-
-
-
-
-
-                            ...currentEntry,
-
-
-
-
-
-
-
-                            ability: event.target.value,
-
-
-
-
-
-
-
-                          }))
-
-
-
-
-
-
-
-                        }
-
-
-
-
-
-
-
-                        value={
-
-
-
-
-
-
-
-                          checkAbilityOptions.includes(
-
-
-
-
-
-
-
-                            entry.ability as (typeof checkAbilityOptions)[number],
-
-
-
-
-
-
-
-                          )
-
-
-
-
-
-
-
-                            ? entry.ability
-
-
-
-
-
-
-
-                            : ''
-
-
-
-
-
-
-
-                        }
-
-
-
-
-
-
-
-                      >
-
-
-
-
-
-
-
-                        <option value="">Свой вариан‚</option>
-
-
-
-
-
-
-
-                        {checkAbilityOptions.map((option) => (
-
-
-
-
-
-
-
-                          <option key={option} value={option}>
-
-
-
-
-
-
-
-                            {option}
-
-
-
-
-
-
-
-                          </option>
-
-
-
-
-
-
-
-                        ))}
-
-
-
-
-
-
-
-                      </select>
-
-
-
-
-
-
-
-                      <input
-
-
-
-
-
-
-
-                        onChange={(event) =>
-
-
-
-
-
-
-
-                          updateCheckClueEntry(entry.id, (currentEntry) => ({
-
-
-
-
-
-
-
-                            ...currentEntry,
-
-
-
-
-
-
-
-                            ability: event.target.value,
-
-
-
-
-
-
-
-                          }))
-
-
-
-
-
-
-
-                        }
-
-
-
-
-
-
-
-                        placeholder="Например, Внимательность"
-
-
-
-
-
-
-
-                        value={entry.ability}
-
-
-
-
-
-
-
-                      />
-
-
-
-
-
-
-
-                    </div>
-
-
-
-
-
-
-
-                    <div className="checks-difficulty-cell">
-
-
-
-
-
-
-
-                      <select
-
-
-
-
-
-
-
-                        onChange={(event) =>
-
-
-
-
-
-
-
-                          updateCheckClueEntry(entry.id, (currentEntry) => ({
-
-
-
-
-
-
-
-                            ...currentEntry,
-
-
-
-
-
-
-
-                            difficulty: event.target.value,
-
-
-
-
-
-
-
-                          }))
-
-
-
-
-
-
-
-                        }
-
-
-
-
-
-
-
-                        value={
-
-
-
-
-
-
-
-                          checkDifficultyOptions.includes(
-
-
-
-
-
-
-
-                            entry.difficulty as (typeof checkDifficultyOptions)[number],
-
-
-
-
-
-
-
-                          )
-
-
-
-
-
-
-
-                            ? entry.difficulty
-
-
-
-
-
-
-
-                            : ''
-
-
-
-
-
-
-
-                        }
-
-
-
-
-
-
-
-                      >
-
-
-
-
-
-
-
-                        <option value="">Свой вариан‚</option>
-
-
-
-
-
-
-
-                        {checkDifficultyOptions.map((option) => (
-
-
-
-
-
-
-
-                          <option key={option} value={option}>
-
-
-
-
-
-
-
-                            {option}
-
-
-
-
-
-
-
-                          </option>
-
-
-
-
-
-
-
-                        ))}
-
-
-
-
-
-
-
-                      </select>
-
-
-
-
-
-
-
-                      <input
-
-
-
-
-
-
-
-                        onChange={(event) =>
-
-
-
-
-
-
-
-                          updateCheckClueEntry(entry.id, (currentEntry) => ({
-
-
-
-
-
-
-
-                            ...currentEntry,
-
-
-
-
-
-
-
-                            difficulty: event.target.value,
-
-
-
-
-
-
-
-                          }))
-
-
-
-
-
-
-
-                        }
-
-
-
-
-
-
-
-                        placeholder="Например, DC 14"
-
-
-
-
-
-
-
-                        value={entry.difficulty}
-
-
-
-
-
-
-
-                      />
-
-
-
-
-
-
-
-                    </div>
-
-
-
-
-
-
-
-                    <textarea
-
-
-
-
-
-
-
-                      onChange={(event) =>
-
-
-
-
-
-
-
-                        updateCheckClueEntry(entry.id, (currentEntry) => ({
-
-
-
-
-
-
-
-                          ...currentEntry,
-
-
-
-
-
-
-
-                          outcome: event.target.value,
-
-
-
-
-
-
-
-                        }))
-
-
-
-
-
-
-
-                      }
-
-
-
-
-
-
-
-                      rows={2}
-
-
-
-
-
-
-
-                      value={entry.outcome}
-
-
-
-
-
-
-
-                    />
-
-
-
-
-
-
-
-                    <button
-
-
-
-
-
-
-
-                      className="inline-link"
-
-
-
-
-
-
-
-                      onClick={() => removeCheckClueEntry(entry.id)}
-
-
-
-
-
-
-
-                      type="button"
-
-
-
-
-
-
-
-                    >
-
-
-
-
-
-
-
-                      удалить
-
-
-
-
-
-
-
-                    </button>
-
-
-
-
-
-
-
-                  </div>
-
-
-
-
-
-
-
-                ))}
-
-
-
-
-
-
-
-              </div>
-
-
-
-
-
-
-
-            ) : (
-
-
-
-
-
-
-
-              <p className="editor-empty">
-
-
-
-
-
-
-
-                Пока нет проверок Рё порогов улик. Добавь строку, чтобы за„иксирова‚ь о‚кр‹С‚ия для мастера.
-
-
-
-
-
-
-
-              </p>
-
-
-
-
-
-
-
-            )}
-
-
-
-
-
-
-
-          </div>
-
-
-
-
-
-
-
+          <ChecksEditorPanel
+            abilityOptions={checkAbilityOptions}
+            difficultyOptions={checkDifficultyOptions}
+            entries={activeScene.checksClues}
+            linkedPreviewEntry={linkedCheckPreviewEntry}
+            onAddEntry={addCheckClueEntry}
+            onRemoveEntry={removeCheckClueEntry}
+            onUpdateEntry={updateCheckClueEntry}
+          />
           ) : null}
-
-
-
-
-
-
-
-
-
 
 
 
@@ -46014,355 +37893,20 @@ export function GmWindow() {
 
 
           {activeEditorTab === 'handouts' ? (
-
-
-
-
-
-
-
-            <div className="editor-card">
-
-
-
-
-
-
-
-              <div className="section-row">
-
-
-
-
-
-
-
-                <span className="eyebrow">Раздатки</span>
-
-
-
-
-
-
-
-                <button className="ghost-button compact-button" onClick={addHandout} type="button">
-
-
-
-
-
-
-
-                  Р”обави‚ь раздатку
-
-
-
-
-
-
-
-                </button>
-
-
-
-
-
-
-
-              </div>
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-              <div className="handout-list">
-
-
-
-
-
-
-
-                {activeScene.handouts.map((handout) => (
-
-
-
-
-
-
-
-                  <button
-
-
-
-
-
-
-
-                    key={handout.id}
-
-
-
-
-
-
-
-                    className={`handout-card ${handout.id === activeHandout?.id ? 'active' : ''}`}
-
-
-
-
-
-
-
-                    onClick={() => setSelectedHandoutId(handout.id)}
-
-
-
-
-
-
-
-                    type="button"
-
-
-
-
-
-
-
-                  >
-
-
-
-
-
-
-
-                    <strong>{handout.title}</strong>
-
-
-
-
-
-
-
-                    <span>{handout.caption}</span>
-
-
-
-
-
-
-
-                  </button>
-
-
-
-
-
-
-
-                ))}
-
-
-
-
-
-
-
-              </div>
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-              {activeHandout ? (
-
-
-
-
-
-
-
-                <div className="handout-editor">
-
-
-
-
-
-
-
-                  <div className="section-row">
-
-
-
-
-
-
-
-                    <span className="eyebrow">Выбранная раздатка</span>
-
-
-
-
-
-
-
-                    <button className="inline-link" onClick={() => removeHandout(activeHandout.id)} type="button">
-
-
-
-
-
-
-
-                      Удали‚ь раздатку
-
-
-
-
-
-
-
-                    </button>
-
-
-
-
-
-
-
-                  </div>
-
-
-
-
-
-
-
-                  <label className="field"><span>ID раздатки</span><input onChange={(event) => renameHandoutId(activeHandout.id, event.target.value)} value={activeHandout.id} /></label>
-
-
-
-
-
-
-
-                  <label className="field"><span>Название</span><input onChange={(event) => updateHandout(activeHandout.id, (handout) => ({ ...handout, title: event.target.value }))} value={activeHandout.title} /></label>
-
-
-
-
-
-
-
-                  <label className="field"><span>Подпись</span><input onChange={(event) => updateHandout(activeHandout.id, (handout) => ({ ...handout, caption: event.target.value }))} value={activeHandout.caption} /></label>
-
-
-
-
-
-
-
-                  <label className="field"><span>Изображение из библиотеки</span><select onChange={(event) => { if (event.target.value) { applyLibraryImageToHandout(activeHandout.id, event.target.value) } }} value={activeHandout.imageAssetId ?? ""}><option value="">Не выбрано</option>{imageAssets.map((asset) => <option key={asset.id} value={asset.id}>{asset.title}</option>)}</select></label>
-
-
-
-
-
-
-
-                  <label className="field"><span>Текст</span><textarea onChange={(event) => updateHandout(activeHandout.id, (handout) => ({ ...handout, body: event.target.value }))} rows={5} value={activeHandout.body} /></label>
-
-
-
-
-
-
-
-                  <label className="field"><span>Загрузить изображение</span><input accept="image/*" onChange={(event) => void handleHandoutImageUpload(activeHandout.id, event.target.files?.[0] ?? null)} type="file" /></label>
-
-
-
-
-
-
-
-                  <div className="action-row"><button className="primary-button compact-button" onClick={() => pushHandoutToPlayer(activeScene, activeHandout)} type="button">Показать раздатку игрока</button></div>
-
-
-
-
-
-
-
-                </div>
-
-
-
-
-
-
-
-              ) : (
-
-
-
-
-
-
-
-                <p className="editor-empty">Раздатка пока не выбрана. Нажми на карточку, чтобы начать редактирование.</p>
-
-
-
-
-
-
-
-              )}
-
-
-
-
-
-
-
-            </div>
-
-
-
-
-
-
-
+            <HandoutsEditorPanel
+              activeHandout={activeHandout}
+              handouts={activeScene.handouts}
+              imageAssets={imageAssets}
+              selectedHandoutId={selectedHandoutId}
+              onAddHandout={addHandout}
+              onApplyLibraryImageToHandout={applyLibraryImageToHandout}
+              onRemoveHandout={removeHandout}
+              onRenameHandoutId={renameHandoutId}
+              onSelectHandout={setSelectedHandoutId}
+              onUpdateHandout={updateHandout}
+              onUploadHandoutImage={handleHandoutImageUpload}
+            />
           ) : null}
-
-
-
-
-
 
 
 
@@ -46389,7 +37933,17 @@ export function GmWindow() {
 
 
 
-              <div className="section-row">
+              <input
+                ref={monsterImportFileInputRef}
+                accept=".json,application/json"
+                className="visually-hidden"
+                onChange={(event) => {
+                  void handleMonsterImport(event.target.files?.[0] ?? null)
+                }}
+                type="file"
+              />
+
+              <div className="section-row scene-editor-card-title-row">
 
 
 
@@ -46405,7 +37959,33 @@ export function GmWindow() {
 
 
 
-                <button className="ghost-button compact-button" onClick={addMonsterBlock} type="button">Р”обави‚ь монстра</button>
+                <button
+                  aria-label="Добавить монстра"
+                  className="ghost-button compact-button token-modal-icon-button"
+                  data-tooltip="Добавить монстра"
+                  onClick={addMonsterBlock}
+                  type="button"
+                >
+                  <i aria-hidden="true" className="fa-solid fa-plus" />
+                </button>
+                <button
+                  aria-label="Импортировать монстра"
+                  className="ghost-button compact-button token-modal-icon-button"
+                  data-tooltip="Импортировать монстра"
+                  onClick={triggerMonsterImport}
+                  type="button"
+                >
+                  <i aria-hidden="true" className="fa-solid fa-file-import" />
+                </button>
+                <button
+                  aria-label="Открыть бестиарий"
+                  className="ghost-button compact-button token-modal-icon-button"
+                  data-tooltip="Открыть бестиарий"
+                  onClick={() => setIsBestiaryModalOpen(true)}
+                  type="button"
+                >
+                  <i aria-hidden="true" className="fa-solid fa-dragon" />
+                </button>
 
 
 
@@ -46421,6 +38001,111 @@ export function GmWindow() {
 
 
 
+              <div className="field monster-library-picker">
+                <span>Библиотека монстров</span>
+                <div className={`monster-library-dropdown ${isMonsterLibraryDropdownOpen ? 'is-open' : ''}`}>
+                  <button
+                    aria-expanded={isMonsterLibraryDropdownOpen}
+                    aria-haspopup="listbox"
+                    className="monster-library-trigger"
+                    onClick={() => setIsMonsterLibraryDropdownOpen((isOpen) => !isOpen)}
+                    type="button"
+                  >
+                    <span>
+                      {projectState.monsterLibrary.length > 0
+                        ? 'Выбрать монстра из библиотеки'
+                        : 'Библиотека пуста'}
+                    </span>
+                    <i aria-hidden="true" className="fa-solid fa-chevron-down" />
+                  </button>
+
+                  {isMonsterLibraryDropdownOpen ? (
+                    <div className="monster-library-menu" role="listbox">
+                      <label className="monster-library-search">
+                        <i aria-hidden="true" className="fa-solid fa-magnifying-glass" />
+                        <input
+                          autoFocus
+                          onChange={(event) => setMonsterLibrarySearch(event.target.value)}
+                          placeholder="Поиск монстра"
+                          value={monsterLibrarySearch}
+                        />
+                      </label>
+
+                      <div className="monster-library-options">
+                        {projectState.monsterLibrary
+                          .filter((monster) => {
+                            const searchValue = monsterLibrarySearch.trim().toLocaleLowerCase('ru-RU')
+
+                            if (!searchValue) {
+                              return true
+                            }
+
+                            return [monster.name, monster.subtitle, monster.source, monster.creatureType]
+                              .filter(Boolean)
+                              .some((value) => value.toLocaleLowerCase('ru-RU').includes(searchValue))
+                          })
+                          .map((monster) => (
+                            <div className="monster-library-option-row" key={monster.id}>
+                              <button
+                                className="monster-library-option"
+                                onClick={() => addMonsterFromLibrary(monster.id)}
+                                role="option"
+                                type="button"
+                              >
+                                <span className="monster-library-option-name">{monster.name}</span>
+                                <span className="monster-library-option-meta">
+                                  {monster.subtitle || monster.source || 'Без описания'}
+                                </span>
+                              </button>
+                              <button
+                                aria-label={`Удалить ${monster.name} из библиотеки`}
+                                className="ghost-button compact-button token-modal-icon-button monster-library-delete-button"
+                                data-tooltip="Удалить из библиотеки"
+                                onClick={() => setPendingMonsterLibraryDeleteId(monster.id)}
+                                type="button"
+                              >
+                                <i aria-hidden="true" className="fa-solid fa-trash" />
+                              </button>
+                            </div>
+                          ))}
+                        {projectState.monsterLibrary.length === 0 ? (
+                          <p className="editor-empty">Сохрани монстра в библиотеку, чтобы он появился здесь.</p>
+                        ) : null}
+                        {projectState.monsterLibrary.length > 0 &&
+                        projectState.monsterLibrary.every((monster) => {
+                          const searchValue = monsterLibrarySearch.trim().toLocaleLowerCase('ru-RU')
+
+                          return (
+                            searchValue &&
+                            ![monster.name, monster.subtitle, monster.source, monster.creatureType]
+                              .filter(Boolean)
+                              .some((value) => value.toLocaleLowerCase('ru-RU').includes(searchValue))
+                          )
+                        }) ? (
+                          <p className="editor-empty">В библиотеке нет монстров по этому запросу.</p>
+                        ) : null}
+                      </div>
+                    </div>
+                  ) : null}
+                </div>
+              </div>
+
+              <div className="monster-list-spoiler">
+                <button
+                  aria-expanded={!isMonsterListCollapsed}
+                  className="monster-list-toggle"
+                  onClick={() => setIsMonsterListCollapsed((isCollapsed) => !isCollapsed)}
+                  type="button"
+                >
+                  <span className="eyebrow">Список монстров</span>
+                  <span className="monster-list-count">{activeScene.monsterBlocks.length}</span>
+                  <i
+                    aria-hidden="true"
+                    className={`fa-solid ${isMonsterListCollapsed ? 'fa-chevron-down' : 'fa-chevron-up'}`}
+                  />
+                </button>
+
+              {!isMonsterListCollapsed ? (
               <div className="monster-list">
 
 
@@ -46453,7 +38138,7 @@ export function GmWindow() {
 
 
 
-                    <button className="monster-card-trigger" onClick={() => setSelectedMonsterId(monster.id)} type="button">
+                    <button className="monster-card-trigger" onClick={() => selectMonsterForEditing(monster.id)} type="button">
 
 
 
@@ -46477,7 +38162,7 @@ export function GmWindow() {
 
 
 
-                      <span className="scene-card-summary">КБ {monster.armorClass} • ХП {monster.hitPoints} • CR {monster.challenge || '?'}</span>
+                      <span className="scene-card-summary">КД {monster.armorClass} • ХП {monster.hitPoints} • CR {monster.challenge || '?'}</span>
 
 
 
@@ -46493,7 +38178,50 @@ export function GmWindow() {
 
 
 
-                    <button className="ghost-button compact-button" onClick={() => toggleMonsterCollapsed(monster.id)} type="button">{collapsedMonsterIds.includes(monster.id) ? "Развернуть" : "Свернуть"}</button>
+                    <div className="monster-card-actions">
+                      <label className="monster-count-field monster-card-count-field"><span>Количество</span><input min="1" onChange={(event) => updateMonsterSpawnCount(monster.id, event.target.value, getMonsterSpawnCount(monster.id))} type="number" value={getMonsterSpawnCount(monster.id)} /></label>
+                      <button
+                        aria-label={getMonsterSpawnCount(monster.id) > 1 ? 'Создать группу врагов' : 'Создать токен из монстра'}
+                        className="primary-button compact-button token-modal-icon-button monster-toolbar-button monster-token-button"
+                        data-tooltip={getMonsterSpawnCount(monster.id) > 1 ? 'Создать группу врагов' : 'Создать токен'}
+                        onClick={() => createTokensFromMonster(monster, getMonsterSpawnCount(monster.id))}
+                        type="button"
+                      >
+                        <i aria-hidden="true" className="fa-solid fa-chess-pawn" />
+                      </button>
+                      <button
+                        aria-label="Сохранить монстра в библиотеку"
+                        className="ghost-button compact-button token-modal-icon-button monster-toolbar-button monster-library-save-button"
+                        data-tooltip="Сохранить в библиотеку"
+                        onClick={() => saveMonsterToLibrary(activeMonster)}
+                        type="button"
+                      >
+                        <i aria-hidden="true" className="fa-solid fa-bookmark" />
+                      </button>
+
+                      <button
+                        aria-label="Удалить монстра"
+                        className="ghost-button compact-button token-modal-icon-button scene-editor-delete-button monster-toolbar-button"
+                        data-tooltip="Удалить монстра"
+                        onClick={() => removeMonsterBlock(monster.id)}
+                        type="button"
+                      >
+                        <i aria-hidden="true" className="fa-solid fa-trash" />
+                      </button>
+                      <button
+                        aria-expanded={!collapsedMonsterIds.includes(monster.id)}
+                        aria-label={collapsedMonsterIds.includes(monster.id) ? 'Развернуть блок монстра' : 'Свернуть блок монстра'}
+                        className="ghost-button compact-button token-modal-icon-button monster-card-collapse-button"
+                        data-tooltip={collapsedMonsterIds.includes(monster.id) ? 'Развернуть' : 'Свернуть'}
+                        onClick={() => toggleMonsterCollapsed(monster.id)}
+                        type="button"
+                      >
+                        <i
+                          aria-hidden="true"
+                          className={`fa-solid ${collapsedMonsterIds.includes(monster.id) ? 'fa-chevron-down' : 'fa-chevron-up'}`}
+                        />
+                      </button>
+                    </div>
 
 
 
@@ -46518,6 +38246,8 @@ export function GmWindow() {
 
 
               </div>
+              ) : null}
+              </div>
 
 
 
@@ -46541,7 +38271,7 @@ export function GmWindow() {
 
 
 
-                  <div className="section-row">
+                  <div className="section-row monster-editor-toolbar">
 
 
 
@@ -46565,7 +38295,7 @@ export function GmWindow() {
 
 
 
-                      <label className="field compact-inline-field"><span>Количество</span><input min="1" onChange={(event) => setNewMonsterSpawnCount(clampSpawnCount(Number(event.target.value), newMonsterSpawnCount))} type="number" value={newMonsterSpawnCount} /></label>
+                      <label className="monster-count-field"><span>Количество</span><input min="1" onChange={(event) => updateMonsterSpawnCount(activeMonster.id, event.target.value, newMonsterSpawnCount)} type="number" value={newMonsterSpawnCount} /></label>
 
 
 
@@ -46573,7 +38303,15 @@ export function GmWindow() {
 
 
 
-                      <button className="primary-button compact-button" onClick={() => createTokensFromMonster(activeMonster, newMonsterSpawnCount)} type="button">{newMonsterSpawnCount > 1 ? "Создать группу врагов" : "Создать токен из монстра"}</button>
+                      <button
+                        aria-label={newMonsterSpawnCount > 1 ? 'Создать группу врагов' : 'Создать токен из монстра'}
+                        className="primary-button compact-button token-modal-icon-button monster-toolbar-button monster-token-button"
+                        data-tooltip={newMonsterSpawnCount > 1 ? 'Создать группу врагов' : 'Создать токен'}
+                        onClick={() => createTokensFromMonster(activeMonster, newMonsterSpawnCount)}
+                        type="button"
+                      >
+                        <i aria-hidden="true" className="fa-solid fa-chess-pawn" />
+                      </button>
 
 
 
@@ -46581,15 +38319,26 @@ export function GmWindow() {
 
 
 
-                      <button className="ghost-button compact-button" onClick={() => toggleMonsterCollapsed(activeMonster.id)} type="button">{isActiveMonsterCollapsed ? "Развернуть блок" : "Свернуть блок"}</button>
+                      <button
+                        aria-label="Удалить монстра"
+                        className="ghost-button compact-button token-modal-icon-button scene-editor-delete-button monster-toolbar-button"
+                        data-tooltip="Удалить монстра"
+                        onClick={() => removeMonsterBlock(activeMonster.id)}
+                        type="button"
+                      >
+                        <i aria-hidden="true" className="fa-solid fa-trash" />
+                      </button>
 
-
-
-
-
-
-
-                      <button className="inline-link" onClick={() => removeMonsterBlock(activeMonster.id)} type="button">Удали‚ь монстра</button>
+                      <button
+                        aria-expanded={!isActiveMonsterCollapsed}
+                        aria-label={isActiveMonsterCollapsed ? 'Развернуть блок' : 'Свернуть блок'}
+                        className="ghost-button compact-button token-modal-icon-button monster-toolbar-button"
+                        data-tooltip={isActiveMonsterCollapsed ? 'Развернуть блок' : 'Свернуть блок'}
+                        onClick={() => toggleMonsterCollapsed(activeMonster.id)}
+                        type="button"
+                      >
+                        <i aria-hidden="true" className={`fa-solid ${isActiveMonsterCollapsed ? 'fa-chevron-down' : 'fa-chevron-up'}`} />
+                      </button>
 
 
 
@@ -46613,7 +38362,47 @@ export function GmWindow() {
 
 
 
-                  <label className="field"><span>ID монстра</span><input onChange={(event) => renameMonsterId(activeMonster.id, event.target.value)} value={activeMonster.id} /></label>
+                  {isActiveMonsterCollapsed ? (
+                    <div className="monster-collapsed-card">
+                      <strong>{activeMonster.name}</strong>
+                      <span className="scene-card-summary">
+                        КД {activeMonster.armorClass} • ХП {activeMonster.hitPoints} • CR {activeMonster.challenge || '?'}
+                      </span>
+                    </div>
+                  ) : (
+                    <>
+                  <div className="monster-image-row">
+                    <label className="monster-image-upload">
+                      <span
+                        className="monster-image-preview"
+                        style={activeMonster.imageSrc ? { backgroundImage: `url(${activeMonster.imageSrc})` } : undefined}
+                      >
+                        {!activeMonster.imageSrc ? (
+                          <span className="monster-image-placeholder">
+                            {activeMonster.name.charAt(0).toUpperCase()}
+                          </span>
+                        ) : null}
+                        <span className="monster-image-upload-overlay">
+                          <i aria-hidden="true" className="fa-solid fa-upload" />
+                        </span>
+                      </span>
+                      <input
+                        accept="image/*"
+                        className="visually-hidden"
+                        onChange={(event) => {
+                          void handleMonsterImageUpload(activeMonster.id, event.target.files?.[0] ?? null)
+                          event.target.value = ''
+                        }}
+                        type="file"
+                      />
+                    </label>
+                    <label className="field monster-image-library-field"><span>Картинка из библиотеки</span><StyledSelect onChange={(event) => { if (event.target.value) { applyLibraryImageToMonster(activeMonster.id, event.target.value) } }} value={activeMonster.imageAssetId ?? ""}><option value="">Не выбрано</option>{imageAssets.map((asset) => <option key={asset.id} value={asset.id}>{asset.title}</option>)}</StyledSelect></label>
+                  </div>
+
+                  <div className="monster-metadata-grid monster-id-name-grid">
+                    <label className="field"><span>ID монстра</span><input onChange={(event) => renameMonsterId(activeMonster.id, event.target.value)} value={activeMonster.id} /></label>
+                    <label className="field"><span>Имя</span><input onChange={(event) => updateMonster(activeMonster.id, (monster) => ({ ...monster, name: event.target.value }))} value={activeMonster.name} /></label>
+                  </div>
 
 
 
@@ -46621,7 +38410,7 @@ export function GmWindow() {
 
 
 
-                  <label className="field"><span>Рмя</span><input onChange={(event) => updateMonster(activeMonster.id, (monster) => ({ ...monster, name: event.target.value }))} value={activeMonster.name} /></label>
+                  <label className="field"><span>Краткое описание</span><input onChange={(event) => updateMonster(activeMonster.id, (monster) => ({ ...monster, subtitle: event.target.value }))} value={activeMonster.subtitle} /></label>
 
 
 
@@ -46629,29 +38418,13 @@ export function GmWindow() {
 
 
 
-                  <label className="field"><span>Подзаголовок</span><input onChange={(event) => updateMonster(activeMonster.id, (monster) => ({ ...monster, subtitle: event.target.value }))} value={activeMonster.subtitle} /></label>
-
-
-
-
-
-
-
-                  <label className="field"><span>Загрузить изображение</span><input accept="image/*" onChange={(event) => void handleMonsterImageUpload(activeMonster.id, event.target.files?.[0] ?? null)} type="file" /></label>
-
-
-
-
-
-
-
-                  <label className="field"><span>Картинка из библиотеки</span><select onChange={(event) => { if (event.target.value) { applyLibraryImageToMonster(activeMonster.id, event.target.value) } }} value={activeMonster.imageAssetId ?? ""}><option value="">Не выбрано</option>{imageAssets.map((asset) => <option key={asset.id} value={asset.id}>{asset.title}</option>)}</select></label>
-
-
-
-
-
-
+                  <div className="monster-metadata-grid monster-identity-grid">
+                    <label className="field"><span>Источник</span><input onChange={(event) => updateMonster(activeMonster.id, (monster) => ({ ...monster, source: event.target.value }))} value={activeMonster.source} /></label>
+                    <label className="field"><span>Размер</span><StyledSelect onChange={(event) => updateMonster(activeMonster.id, (monster) => ({ ...monster, size: event.target.value }))} value={activeMonster.size}><option value="">Не выбрано</option>{activeMonster.size && !monsterSizeOptions.includes(activeMonster.size as typeof monsterSizeOptions[number]) ? <option value={activeMonster.size}>{activeMonster.size}</option> : null}{monsterSizeOptions.map((size) => <option key={size} value={size}>{size}</option>)}</StyledSelect></label>
+                    <label className="field"><span>Тип</span><input onChange={(event) => updateMonster(activeMonster.id, (monster) => ({ ...monster, creatureType: event.target.value }))} value={activeMonster.creatureType} /></label>
+                    <label className="field"><span>Мировоззрение</span><StyledSelect onChange={(event) => updateMonster(activeMonster.id, (monster) => ({ ...monster, alignment: event.target.value }))} value={activeMonster.alignment}><option value="">Не выбрано</option>{activeMonster.alignment && !monsterAlignmentOptions.includes(activeMonster.alignment as typeof monsterAlignmentOptions[number]) ? <option value={activeMonster.alignment}>{activeMonster.alignment}</option> : null}{monsterAlignmentOptions.filter(Boolean).map((alignment) => <option key={alignment} value={alignment}>{alignment}</option>)}</StyledSelect></label>
+                    <label className="field"><span>БМ</span><input onChange={(event) => updateMonster(activeMonster.id, (monster) => ({ ...monster, proficiencyBonus: event.target.value }))} value={activeMonster.proficiencyBonus ?? ""} /></label>
+                  </div>
 
                   <div className="monster-topline-grid">
 
@@ -46661,7 +38434,7 @@ export function GmWindow() {
 
 
 
-                    <label className="field"><span>Класс брони</span><input onChange={(event) => updateMonster(activeMonster.id, (monster) => ({ ...monster, armorClass: event.target.value }))} value={activeMonster.armorClass} /></label>
+                    <label className="field"><span>Класс доспеха</span><input onChange={(event) => updateMonster(activeMonster.id, (monster) => ({ ...monster, armorClass: event.target.value }))} value={activeMonster.armorClass} /></label>
 
 
 
@@ -46677,6 +38450,8 @@ export function GmWindow() {
 
 
 
+                    <label className="field"><span>Формула хитов</span><input onChange={(event) => updateMonster(activeMonster.id, (monster) => ({ ...monster, hitPointsFormula: event.target.value }))} value={activeMonster.hitPointsFormula} /></label>
+
                     <label className="field"><span>Скорость</span><input onChange={(event) => updateMonster(activeMonster.id, (monster) => ({ ...monster, speed: event.target.value }))} value={activeMonster.speed} /></label>
 
 
@@ -46685,7 +38460,7 @@ export function GmWindow() {
 
 
 
-                    <label className="field"><span>Опасность</span><input onChange={(event) => updateMonster(activeMonster.id, (monster) => ({ ...monster, challenge: event.target.value }))} value={activeMonster.challenge} /></label>
+                    <label className="field"><span>Опасность</span><StyledSelect onChange={(event) => updateMonster(activeMonster.id, (monster) => ({ ...monster, challenge: event.target.value }))} value={activeMonster.challenge}><option value="">Не выбрано</option>{activeMonster.challenge && !monsterChallengeOptions.includes(activeMonster.challenge as typeof monsterChallengeOptions[number]) ? <option value={activeMonster.challenge}>{activeMonster.challenge}</option> : null}{monsterChallengeOptions.map((challenge) => <option key={challenge} value={challenge}>{challenge}</option>)}</StyledSelect></label>
 
 
 
@@ -46709,7 +38484,7 @@ export function GmWindow() {
 
 
 
-                    <label className="field"><span>СР›</span><input type="number" onChange={(event) => updateMonsterAbility(activeMonster.id, 'strength', event.target.value)} value={activeMonster.strength} /></label>
+                    <label className="field"><span>СИЛ</span><input type="number" onChange={(event) => updateMonsterAbility(activeMonster.id, 'strength', event.target.value)} value={activeMonster.strength} /></label>
 
 
 
@@ -46733,7 +38508,7 @@ export function GmWindow() {
 
 
 
-                    <label className="field"><span>РНТ</span><input type="number" onChange={(event) => updateMonsterAbility(activeMonster.id, 'intelligence', event.target.value)} value={activeMonster.intelligence} /></label>
+                    <label className="field"><span>ИНТ</span><input type="number" onChange={(event) => updateMonsterAbility(activeMonster.id, 'intelligence', event.target.value)} value={activeMonster.intelligence} /></label>
 
 
 
@@ -46780,6 +38555,13 @@ export function GmWindow() {
 
 
 
+
+                  <div className="monster-metadata-grid">
+                    <label className="field"><span>Уязвимости к урону</span><input onChange={(event) => updateMonster(activeMonster.id, (monster) => ({ ...monster, damageVulnerabilities: event.target.value }))} value={activeMonster.damageVulnerabilities} /></label>
+                    <label className="field"><span>Сопротивления урону</span><input onChange={(event) => updateMonster(activeMonster.id, (monster) => ({ ...monster, damageResistances: event.target.value }))} value={activeMonster.damageResistances} /></label>
+                    <label className="field"><span>Иммунитеты к урону</span><input onChange={(event) => updateMonster(activeMonster.id, (monster) => ({ ...monster, damageImmunities: event.target.value }))} value={activeMonster.damageImmunities} /></label>
+                    <label className="field"><span>Иммунитеты к состояниям</span><input onChange={(event) => updateMonster(activeMonster.id, (monster) => ({ ...monster, conditionImmunities: event.target.value }))} value={activeMonster.conditionImmunities} /></label>
+                  </div>
 
                   <label className="field"><span>Чувства</span><input onChange={(event) => updateMonster(activeMonster.id, (monster) => ({ ...monster, senses: event.target.value }))} value={activeMonster.senses} /></label>
 
@@ -46837,7 +38619,9 @@ export function GmWindow() {
 
 
 
-                  <label className="field"><span>Р—аме‚ки мастера</span><textarea onChange={(event) => updateMonster(activeMonster.id, (monster) => ({ ...monster, notes: event.target.value }))} rows={4} value={activeMonster.notes} /></label>
+                  <label className="field"><span>Заметки мастера</span><textarea onChange={(event) => updateMonster(activeMonster.id, (monster) => ({ ...monster, notes: event.target.value }))} rows={4} value={activeMonster.notes} /></label>
+                    </>
+                  )}
 
 
 
@@ -46901,198 +38685,84 @@ export function GmWindow() {
 
 
 
+          {pendingMonsterLibraryDeleteId
+            ? (() => {
+                const monsterToDelete = projectState.monsterLibrary.find(
+                  (monster) => monster.id === pendingMonsterLibraryDeleteId,
+                )
+
+                if (!monsterToDelete) {
+                  return null
+                }
+
+                return (
+                  <div
+                    className="modal-backdrop monster-library-confirm-backdrop"
+                    onClick={() => setPendingMonsterLibraryDeleteId(null)}
+                    role="presentation"
+                  >
+                    <div
+                      aria-label="Подтверждение удаления монстра из библиотеки"
+                      aria-modal="true"
+                      className="modal-dialog monster-library-confirm-modal"
+                      onClick={(event) => event.stopPropagation()}
+                      role="dialog"
+                    >
+                      <div className="modal-header">
+                        <div className="control-group-copy">
+                          <span className="eyebrow">Библиотека монстров</span>
+                          <p className="editor-hint">
+                            Удалить монстра <strong>{monsterToDelete.name}</strong> из библиотеки?
+                          </p>
+                        </div>
+                      </div>
+                      <div className="action-row monster-library-confirm-actions">
+                        <button
+                          className="ghost-button compact-button"
+                          onClick={() => setPendingMonsterLibraryDeleteId(null)}
+                          type="button"
+                        >
+                          Нет
+                        </button>
+                        <button
+                          className="primary-button compact-button"
+                          onClick={() => removeMonsterFromLibrary(monsterToDelete.id)}
+                          type="button"
+                        >
+                          Да, удалить
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )
+              })()
+            : null}
+
           {activeEditorTab === 'audio' ? (
-
-
-
-
-
-
-
-            <div className="editor-card">
-
-
-
-
-
-
-
-              <div className="section-row"><span className="eyebrow">Аудио</span><strong>{activeScene.recommendedAudio.length} треков в сцене</strong></div>
-
-
-
-
-
-
-
-              <div className="audio-upload-grid">
-
-
-
-
-
-
-
-                <label className="field"><span>Название трека</span><input onChange={(event) => setNewAudioTitle(event.target.value)} placeholder="Р’веди название, затем в‹бери файл" value={newAudioTitle} /></label>
-
-
-
-
-
-
-
-                <label className="field"><span>Тип трека</span><select onChange={(event) => setNewAudioKind(event.target.value as AudioTrackKind)} value={newAudioKind}><option value="music">Музыка</option><option value="ambience">Атмосфера</option><option value="sfx">Эффект</option></select></label>
-
-
-
-
-
-
-
-                <label className="field"><span>Загрузить</span><input accept="audio/*" onChange={(event) => void addAudioTrack(event.target.files?.[0] ?? null)} type="file" /></label>
-
-
-
-
-
-
-
-              </div>
-
-
-
-
-
-
-
-              {activeAudioTrack ? (
-
-
-
-
-
-
-
-                <div className="audio-player-card">
-
-
-
-
-
-
-
-                  <div className="section-row"><div><span className="eyebrow">Выбранный трек</span><h3>{activeAudioTrack.title}</h3></div><span className={`audio-kind audio-kind-${activeAudioTrack.kind}`}>{audioKindLabels[activeAudioTrack.kind]}</span></div>
-
-
-
-
-
-
-
-                  <div className="audio-controls"><button className="primary-button compact-button" onClick={() => void playAudioTrack(activeAudioTrack.id)} type="button">Р’оспроизвес‚Рё</button><button className="ghost-button compact-button" onClick={pauseAudioPlayback} type="button">Пауза</button><button className="ghost-button compact-button" onClick={stopAudioPlayback} type="button">Стоп</button></div>
-
-
-
-
-
-
-
-                  <div className="audio-settings-grid"><label className="field range-field"><span>Громкость: {audioVolume}%</span><input max="100" min="0" onChange={(event) => setAudioVolume(Number(event.target.value))} type="range" value={audioVolume} /></label><label className="checkbox-field"><input checked={audioLoop} onChange={(event) => setAudioLoop(event.target.checked)} type="checkbox" /><span>Р—а†икли‚ь С‚еку‰РёР№ трек</span></label></div>
-
-
-
-
-
-
-
-                  <label className="field"><span>Файл из библиотеки</span><select onChange={(event) => { if (event.target.value) { applyLibraryAudioToTrack(activeAudioTrack.id, event.target.value) } }} value={activeAudioTrack.assetId ?? ""}><option value="">Не выбрано</option>{audioAssets.map((asset) => <option key={asset.id} value={asset.id}>{asset.title}</option>)}</select></label>
-
-
-
-
-
-
-
-                  <label className="field"><span>Название трека</span><input onChange={(event) => updateAudioTrack(activeAudioTrack.id, (track) => ({ ...track, title: event.target.value }))} value={activeAudioTrack.title} /></label>
-
-
-
-
-
-
-
-                  <label className="field"><span>Тип трека</span><select onChange={(event) => updateAudioTrack(activeAudioTrack.id, (track) => ({ ...track, kind: event.target.value as AudioTrackKind }))} value={activeAudioTrack.kind}><option value="music">Музыка</option><option value="ambience">Атмосфера</option><option value="sfx">Эффект</option></select></label>
-
-
-
-
-
-
-
-                  <div className="section-row"><button className="ghost-button compact-button" onClick={() => toggleSceneAudioRecommendation(activeAudioTrack.id)} type="button">{activeScene.recommendedAudio.includes(activeAudioTrack.id) ? "Убрать из сцены" : "Добавить в сцену"}</button><button className="inline-link" onClick={() => removeAudioTrack(activeAudioTrack.id)} type="button">Удалить трек</button></div>
-
-
-
-
-
-
-
-                  {!activeAudioTrack.src ? <p className="editor-empty">У этого трека пока нет подключенного файла, выбери его в библиотеке или загрузи заново.</p> : null}
-
-
-
-
-
-
-
-                </div>
-
-
-
-
-
-
-
-              ) : (
-
-
-
-
-
-
-
-                <p className="editor-empty">Трек пока не выбран. Выбери карточку, чтобы открыть нас‚ро№ки звука.</p>
-
-
-
-
-
-
-
-              )}
-
-
-
-
-
-
-
-              <div className="audio-list">{adventure.audioLibrary.map((track) => { const isRecommended = activeScene.recommendedAudio.includes(track.id); const isSelected = track.id === activeAudioTrack?.id; return (<button key={track.id} className={`audio-card ${isSelected ? "active" : ""}`} onClick={() => setSelectedAudioId(track.id)} type="button"><div className="audio-card-header"><strong>{track.title}</strong><span className={`audio-kind audio-kind-${track.kind}`}>{audioKindLabels[track.kind]}</span></div><span className="audio-meta">{isRecommended ? "Рекомендован для этой сцены" : "Только в библиотеке"}</span><span className="audio-meta">{track.src ? (isAudioPlaying && isSelected ? "Сейчас играет" : "Готов к воспроизведению") : "Файл не найден"}</span></button>) })}</div>
-
-
-
-
-
-
-
-            </div>
-
-
-
-
-
-
-
+            <AudioEditorPanel
+              activeTrack={activeAudioTrack}
+              audioAssets={audioAssets}
+              audioLoop={audioLoop}
+              audioTracks={adventure.audioLibrary}
+              audioVolume={audioVolume}
+              isAudioPlaying={isAudioPlaying}
+              newAudioKind={newAudioKind}
+              newAudioTitle={newAudioTitle}
+              recommendedAudioIds={activeScene.recommendedAudio}
+              onAddAudioTrack={addAudioTrack}
+              onApplyLibraryAudioToTrack={applyLibraryAudioToTrack}
+              onNewAudioKindChange={setNewAudioKind}
+              onNewAudioTitleChange={setNewAudioTitle}
+              onPauseAudioPlayback={pauseAudioPlayback}
+              onPlayAudioTrack={playAudioTrack}
+              onRemoveAudioTrack={removeAudioTrack}
+              onSelectAudioTrack={setSelectedAudioId}
+              onSetAudioLoop={setAudioLoop}
+              onSetAudioVolume={setAudioVolume}
+              onStopAudioPlayback={stopAudioPlayback}
+              onToggleSceneAudioRecommendation={toggleSceneAudioRecommendation}
+              onUpdateAudioTrack={updateAudioTrack}
+            />
           ) : null}
 
 
@@ -47109,111 +38779,6 @@ export function GmWindow() {
 
 
 
-          <div className="status-card">
-
-
-
-
-
-
-
-            <span className="status-label">Экран игроков</span>
-
-
-
-
-
-
-
-            <strong>{effectivePlayerModeLabel}</strong>
-
-
-
-
-
-
-
-            <p>{currentPlayerScene ? `${currentPlayerScene.title} (${currentPlayerScene.location})` : "Сцена не выбрана"}</p>
-
-
-
-
-
-
-
-            <strong>{sessionState?.playerDisplay.mode === "splash" ? currentPlayerSplash?.title ?? "Splash-экран не настроен" : currentPlayerHandout?.title ?? "Раздатка не выбрана"}</strong>
-
-
-
-
-
-
-
-            <p>{activeAudioTrack ? `${isAudioPlaying ? "Играет" : "Пауза"}: ${activeAudioTrack.title}` : "Аудио не выбрано"}</p>
-
-
-
-
-
-
-
-          </div>
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-          <div className="status-card">
-
-
-
-
-
-
-
-            <span className="status-label">Снапшоты проекта</span>
-
-
-
-
-
-
-
-            <strong>{projectSnapshots.length} снимков</strong>
-
-
-
-
-
-
-
-            <p>Недавние со…ранения сос‚ояния, к которым можно быстро вернуться.</p>
-
-
-
-
-
-
-
-            <div className="scene-list">{recentProjectSnapshots.map((snapshot) => (<button key={snapshot.id} className="scene-card" onClick={() => restoreProjectSnapshot(snapshot.id)} type="button"><span className="scene-card-location">{new Date(snapshot.timestamp).toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" })}</span><strong>{snapshot.label}</strong><span className="scene-card-summary">Нажми, чтобы восс‚анови‚ь это сос‚ояние проекта.</span></button>))}</div>
-
-
-
-
-
-
-
-          </div>
 
 
 
@@ -47230,418 +38795,226 @@ export function GmWindow() {
 
 
       </aside>
-
-
-
-
-
-
-
-
-      {isTokenModalOpen && activeToken ? (
-        <div
-          className="modal-backdrop"
-          onClick={() => setIsTokenModalOpen(false)}
-          role="presentation"
-        >
-          <div
-            className="modal-dialog token-modal"
-            onClick={(event) => event.stopPropagation()}
-            role="dialog"
-            aria-modal="true"
-            aria-label="Редактор фишки"
-          >
-            <div className="modal-header">
-              <div className="control-group-copy">
-                <span className="eyebrow">Фишка</span>
-                <p className="editor-hint">
-                  Меняй вид, тип и параметры фишки прямо перед показом игрокам.
-                </p>
-              </div>
-              <button
-                aria-label="Закрыть"
-                className="ghost-button compact-button token-modal-icon-button"
-                onClick={() => setIsTokenModalOpen(false)}
-                title="Закрыть"
-                type="button"
-              >
-                <i aria-hidden="true" className="fa-solid fa-xmark" />
-              </button>
-            </div>
-
-            <div className="editor-stack">
-              <label className="field">
-                <span>Имя</span>
-                <input
-                  onChange={(event) =>
-                    updateToken(activeToken.id, (token) => ({
-                      ...token,
-                      name: event.target.value,
-                    }))
-                  }
-                  value={activeToken.name}
-                />
-              </label>
-
-              <label className="field">
-                <span>Тип</span>
-                <select
-                  onChange={(event) =>
-                    updateToken(activeToken.id, (token) => ({
-                      ...token,
-                      kind: event.target.value as TokenKind,
-                      linkedMonsterId:
-                        event.target.value === 'monster' ? token.linkedMonsterId : null,
-                    }))
-                  }
-                  value={activeToken.kind}
-                >
-                  <option value="player">Игрок</option>
-                  <option value="monster">Монстр</option>
-                  <option value="npc">NPC</option>
-                </select>
-              </label>
-
-              <label className="field">
-                <span>Группа</span>
-                <input
-                  onChange={(event) =>
-                    updateToken(activeToken.id, (token) => ({
-                      ...token,
-                      groupLabel: event.target.value || null,
-                    }))
-                  }
-                  placeholder="Например, волки теней"
-                  value={activeToken.groupLabel ?? ''}
-                />
-              </label>
-
-              <label className="field range-field">
-                <span>Размер: {activeToken.size}px</span>
-                <input
-                  max="144"
-                  min="40"
-                  onChange={(event) =>
-                    updateToken(activeToken.id, (token) => ({
-                      ...token,
-                      size: Number(event.target.value),
-                    }))
-                  }
-                  type="range"
-                  value={activeToken.size}
-                />
-              </label>
-
-              <label className="field range-field">
-                <span>Поворот: {activeToken.rotation}°</span>
-                <input
-                  max="360"
-                  min="0"
-                  onChange={(event) =>
-                    updateToken(activeToken.id, (token) => ({
-                      ...token,
-                      rotation: Number(event.target.value),
-                    }))
-                  }
-                  type="range"
-                  value={activeToken.rotation}
-                />
-              </label>
-
-              <div className="zone-grid">
-                <label className="field">
-                  <span>Текущие ХП</span>
-                  <input
-                    onChange={(event) =>
-                      updateToken(activeToken.id, (token) => ({
-                        ...token,
-                        hitPointsCurrent: event.target.value ? Number(event.target.value) : null,
-                      }))
-                    }
-                    type="number"
-                    value={activeToken.hitPointsCurrent ?? ''}
-                  />
-                </label>
-                <label className="field">
-                  <span>Макс. ХП</span>
-                  <input
-                    onChange={(event) =>
-                      updateToken(activeToken.id, (token) => ({
-                        ...token,
-                        hitPointsMax: event.target.value ? Number(event.target.value) : null,
-                      }))
-                    }
-                    type="number"
-                    value={activeToken.hitPointsMax ?? ''}
-                  />
-                </label>
-                <label className="field">
-                  <span>Инициатива</span>
-                  <input
-                    onChange={(event) =>
-                      updateToken(activeToken.id, (token) => ({
-                        ...token,
-                        initiative: event.target.value ? Number(event.target.value) : null,
-                      }))
-                    }
-                    type="number"
-                    value={activeToken.initiative ?? ''}
-                  />
-                </label>
-                <label className="field token-layer-field">
-                  <span>Порядок слоя</span>
-                  <input
-                    onChange={(event) =>
-                      updateToken(activeToken.id, (token) => ({
-                        ...token,
-                        zIndex: Number(event.target.value),
-                      }))
-                    }
-                    type="number"
-                    value={activeToken.zIndex}
-                  />
-                </label>
-                <button
-                  aria-label="Ниже"
-                  className="ghost-button compact-button token-modal-icon-button"
-                  onClick={() =>
-                    updateToken(activeToken.id, (token) => ({
-                      ...token,
-                      zIndex: token.zIndex - 1,
-                    }))
-                  }
-                  title="Ниже"
-                  type="button"
-                >
-                  <i aria-hidden="true" className="fa-solid fa-arrow-down" />
-                </button>
-                <button
-                  aria-label="Выше"
-                  className="ghost-button compact-button token-modal-icon-button"
-                  onClick={() =>
-                    updateToken(activeToken.id, (token) => ({
-                      ...token,
-                      zIndex: token.zIndex + 1,
-                    }))
-                  }
-                  title="Выше"
-                  type="button"
-                >
-                  <i aria-hidden="true" className="fa-solid fa-arrow-up" />
-                </button>
-                <button
-                  aria-label={
-                    activeToken.hiddenFromPlayers
-                      ? 'Фишка скрыта от игроков'
-                      : 'Фишка видима игрокам'
-                  }
-                  className="ghost-button compact-button token-modal-icon-button token-visibility-toggle"
-                  onClick={() =>
-                    updateToken(activeToken.id, (token) => ({
-                      ...token,
-                      hiddenFromPlayers: !token.hiddenFromPlayers,
-                    }))
-                  }
-                  title={
-                    activeToken.hiddenFromPlayers
-                      ? 'Фишка скрыта от игроков'
-                      : 'Фишка видима игрокам'
-                  }
-                  type="button"
-                >
-                  <i
-                    aria-hidden="true"
-                    className={`fa-solid ${
-                      activeToken.hiddenFromPlayers ? 'fa-eye-slash' : 'fa-eye'
-                    }`}
-                  />
-                </button>
-              </div>
-
-              {activeScene ? (
-                <label className="field">
-                  <span>Связанный монстр</span>
-                  <select
-                    onChange={(event) =>
-                      updateToken(activeToken.id, (token) => ({
-                        ...token,
-                        kind: event.target.value ? 'monster' : token.kind,
-                        linkedMonsterId: event.target.value || null,
-                      }))
-                    }
-                    value={activeToken.linkedMonsterId ?? ''}
-                  >
-                    <option value="">не привязан</option>
-                    {activeScene.monsterBlocks.map((monster) => (
-                      <option key={monster.id} value={monster.id}>
-                        {monster.name}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-              ) : null}
-
-              {activeTokenLinkedMonster ? (
-                <p className="editor-hint">
-                  Связанный монстр: <strong>{activeTokenLinkedMonster.name}</strong>
-                </p>
-              ) : null}
-
-              <div className="action-row zone-action-row">
-                <button
-                  aria-label="Дублировать"
-                  className="ghost-button compact-button token-modal-icon-button"
-                  onClick={() => duplicateToken(activeToken)}
-                  title="Дублировать"
-                  type="button"
-                >
-                  <i aria-hidden="true" className="fa-solid fa-copy" />
-                </button>
-                <button
-                  aria-label="Синхронизировать с монстром"
-                  className="ghost-button compact-button token-modal-icon-button"
-                  disabled={!activeTokenLinkedMonster}
-                  onClick={() => syncTokenStatsFromMonster(activeToken)}
-                  title="Синхронизировать с монстром"
-                  type="button"
-                >
-                  <i aria-hidden="true" className="fa-solid fa-link" />
-                </button>
-                <button
-                  aria-label="Открыть монстра"
-                  className="ghost-button compact-button token-modal-icon-button"
-                  disabled={!activeTokenLinkedMonster}
-                  onClick={() => focusTokenLinkedMonster(activeToken)}
-                  title="Открыть монстра"
-                  type="button"
-                >
-                  <i aria-hidden="true" className="fa-solid fa-address-card fa-vcard" />
-                </button>
-                <button
-                  aria-label="Удалить фишку"
-                  className="ghost-button compact-button token-modal-icon-button"
-                  onClick={() => removeToken(activeToken.id)}
-                  title="Удалить фишку"
-                  type="button"
-                >
-                  <i aria-hidden="true" className="fa-solid fa-trash" />
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
+        </>
       ) : null}
 
-      {isServiceMarkerModalOpen && activeServiceMarker ? (
-        <div
-          className="modal-backdrop"
-          onClick={() => setIsServiceMarkerModalOpen(false)}
-          role="presentation"
-        >
-          <div
-            className="modal-dialog marker-modal"
-            onClick={(event) => event.stopPropagation()}
-            role="dialog"
-            aria-modal="true"
-            aria-label="Редактор служебной отметки"
-          >
-            <div className="modal-header">
-              <div className="control-group-copy">
-                <span className="eyebrow">Служебная отметка</span>
-                <p className="editor-hint">
-                  Рзмени подпись, заметку Рё порядок слоя для о‚ме‚ки на карте.
-                </p>
-              </div>
-              <button
-                className="ghost-button compact-button"
-                onClick={() => setIsServiceMarkerModalOpen(false)}
-                type="button"
+
+
+
+
+
+
+
+      {isProjectReconnectModalOpen && (projectDirectoryHandle || rememberedProjectDirectoryName) ? (
+        <ProjectReconnectModal
+          directoryHandle={projectDirectoryHandle}
+          isPending={isProjectReconnectPending}
+          rememberedDirectoryName={rememberedProjectDirectoryName}
+          onClose={() => setIsProjectReconnectModalOpen(false)}
+          onOpenProjectFolder={() => handleOpenProjectFolder(true)}
+          onReconnectRememberedDirectory={handleReconnectRememberedProjectDirectory}
+        />
+      ) : null}
+
+      {isMapParamsModalOpen && activeScene ? (
+        <MapParamsModal
+          hasResolvedSceneMapImage={Boolean(resolvedSceneMapImage)}
+          imageAssets={imageAssets}
+          scene={activeScene}
+          onApplyLibraryImage={applyLibraryImageToMap}
+          onChangeMapId={(value) =>
+            updateScene(activeScene.id, (scene) => ({
+              ...scene,
+              map: {
+                ...scene.map,
+                id: slugify(value, `${scene.id}-map`),
+              },
+            }))
+          }
+          onChangeMapPlaceholder={(value) =>
+            updateScene(activeScene.id, (scene) => ({
+              ...scene,
+              map: {
+                ...scene.map,
+                placeholder: value,
+              },
+            }))
+          }
+          onChangeMapTitle={(value) =>
+            updateScene(activeScene.id, (scene) => ({
+              ...scene,
+              map: {
+                ...scene.map,
+                title: value,
+              },
+            }))
+          }
+          onClose={() => setIsMapParamsModalOpen(false)}
+        />
+      ) : null}
+
+      {isMapGridModalOpen && activeSceneState ? (
+        <MapGridModal
+          mapGrid={activeMapGrid}
+          onClose={() => setIsMapGridModalOpen(false)}
+          onUpdateMapGrid={updateMapGrid}
+        />
+      ) : null}
+
+      {isMapLayersModalOpen && activeSceneState ? (
+        <MapLayersModal
+          activeLayer={activeLayer ?? null}
+          baseLayerId={activeSceneState.mapLayers[0]?.id ?? null}
+          layerImageInputRef={layerImageInputRef}
+          layers={activeSceneState.mapLayers}
+          onAddLayer={addEmptyMapLayer}
+          onClose={() => setIsMapLayersModalOpen(false)}
+          onRemoveLayer={removeMapLayer}
+          onReplaceLayerImage={handleLayerImageReplace}
+          onSetActiveLayer={setActiveSceneMapLayer}
+          onUpdateLayer={updateActiveSceneMapLayer}
+        />
+      ) : null}
+      {isZoneModalOpen && activeZone && activeScene ? (
+        <ZoneModal
+          activeScene={activeScene}
+          zone={activeZone}
+          onClose={() => setIsZoneModalOpen(false)}
+          onRemoveZone={removeZone}
+          onUpdateZone={updateZone}
+        />
+      ) : null}
+
+      {isTokenModalOpen && activeToken ? (
+        <TokenModal
+          activeScene={activeScene}
+          characters={adventure.characters}
+          linkedCharacter={activeTokenLinkedCharacter}
+          linkedMonster={activeTokenLinkedMonster}
+          token={activeToken}
+          onClose={() => setIsTokenModalOpen(false)}
+          onFocusLinkedCharacter={focusTokenLinkedCharacter}
+          onFocusLinkedMonster={focusTokenLinkedMonster}
+          onRemoveToken={removeToken}
+          onReplaceTokenImage={handleTokenImageReplace}
+          onUpdateToken={updateToken}
+        />
+      ) : null}
+
+      {isServiceMarkerModalOpen && activeServiceMarker && activeScene ? (
+        <ServiceMarkerModal
+          activeScene={activeScene}
+          marker={activeServiceMarker}
+          onClose={() => setIsServiceMarkerModalOpen(false)}
+          onRemoveMarker={removeServiceMarker}
+          onUpdateMarker={updateServiceMarker}
+        />
+      ) : null}
+
+      {pendingCharacterDeleteId
+        ? (() => {
+            const characterToDelete = adventure.characters.find(
+              (character) => character.id === pendingCharacterDeleteId,
+            )
+
+            if (!characterToDelete) {
+              return null
+            }
+
+            return (
+              <div
+                className="modal-backdrop monster-library-confirm-backdrop"
+                onClick={() => setPendingCharacterDeleteId(null)}
+                role="presentation"
               >
-                Закрыть
-              </button>
-            </div>
-
-            <div className="editor-stack">
-              <label className="field">
-                <span>Подпись</span>
-                <input
-                  onChange={(event) =>
-                    updateServiceMarker(activeServiceMarker.id, (marker) => ({
-                      ...marker,
-                      label: event.target.value,
-                    }))
-                  }
-                  value={activeServiceMarker.label}
-                />
-              </label>
-
-              <label className="field">
-                <span>Заметка</span>
-                <textarea
-                  onChange={(event) =>
-                    updateServiceMarker(activeServiceMarker.id, (marker) => ({
-                      ...marker,
-                      note: event.target.value,
-                    }))
-                  }
-                  rows={4}
-                  value={activeServiceMarker.note}
-                />
-              </label>
-
-              <label className="field">
-                <span>Порядок слоя</span>
-                <input
-                  onChange={(event) =>
-                    updateServiceMarker(activeServiceMarker.id, (marker) => ({
-                      ...marker,
-                      zIndex: Number(event.target.value),
-                    }))
-                  }
-                  type="number"
-                  value={activeServiceMarker.zIndex}
-                />
-              </label>
-
-              <div className="layer-controls">
-                <button
-                  className="ghost-button compact-button"
-                  onClick={() =>
-                    updateServiceMarker(activeServiceMarker.id, (marker) => ({
-                      ...marker,
-                      zIndex: marker.zIndex - 1,
-                    }))
-                  }
-                  type="button"
+                <div
+                  aria-label="Подтверждение удаления персонажа"
+                  aria-modal="true"
+                  className="modal-dialog monster-library-confirm-modal"
+                  onClick={(event) => event.stopPropagation()}
+                  role="dialog"
                 >
-                  Ниже
-                </button>
-                <button
-                  className="ghost-button compact-button"
-                  onClick={() =>
-                    updateServiceMarker(activeServiceMarker.id, (marker) => ({
-                      ...marker,
-                      zIndex: marker.zIndex + 1,
-                    }))
-                  }
-                  type="button"
-                >
-                  Выше
-                </button>
+                  <div className="modal-header">
+                    <div className="control-group-copy">
+                      <span className="eyebrow">Персонажи</span>
+                      <p className="editor-hint">
+                        Удалить персонажа <strong>{characterToDelete.name}</strong> из приключения?
+                      </p>
+                    </div>
+                  </div>
+                  <div className="action-row monster-library-confirm-actions">
+                    <button
+                      className="ghost-button compact-button"
+                      onClick={() => setPendingCharacterDeleteId(null)}
+                      type="button"
+                    >
+                      Нет
+                    </button>
+                    <button
+                      className="primary-button compact-button"
+                      onClick={() => removeCharacter(characterToDelete.id)}
+                      type="button"
+                    >
+                      Да, удалить
+                    </button>
+                  </div>
+                </div>
               </div>
+            )
+          })()
+        : null}
 
-              <div className="action-row zone-action-row">
-                <button
-                  className="ghost-button compact-button"
-                  onClick={() => removeServiceMarker(activeServiceMarker.id)}
-                  type="button"
-                >
-                  Удали‚ь отметку
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
+      {isCharacterModalOpen && activeCharacter ? (
+        <Suspense fallback={<LibraryLoadingModal error={null} label="Карточка персонажа" onClose={() => setIsCharacterModalOpen(false)} />}>
+          {builtInSpellLibrary ? (
+            <CharacterModal
+              character={activeCharacter}
+              onClose={() => setIsCharacterModalOpen(false)}
+              spellLibrary={builtInSpellLibrary}
+            />
+          ) : (
+            <LibraryLoadingModal
+              error={spellLibraryLoadError}
+              label="Библиотека заклинаний"
+              onClose={() => setIsCharacterModalOpen(false)}
+            />
+          )}
+        </Suspense>
+      ) : null}
+
+      {isSpellLibraryModalOpen ? (
+        <Suspense fallback={<LibraryLoadingModal error={null} label="Библиотека заклинаний" onClose={() => setIsSpellLibraryModalOpen(false)} />}>
+          {builtInSpellLibrary ? (
+            <SpellLibraryModal
+              onClose={() => setIsSpellLibraryModalOpen(false)}
+              spells={builtInSpellLibrary}
+            />
+          ) : (
+            <LibraryLoadingModal
+              error={spellLibraryLoadError}
+              label="Библиотека заклинаний"
+              onClose={() => setIsSpellLibraryModalOpen(false)}
+            />
+          )}
+        </Suspense>
+      ) : null}
+      {isBestiaryModalOpen ? (
+        <Suspense fallback={<LibraryLoadingModal error={null} label="Бестиарий" onClose={() => setIsBestiaryModalOpen(false)} />}>
+          {builtInBestiary ? (
+            <BestiaryModal
+              loadMonsterDetail={loadBuiltInMonsterDetail}
+              monsters={builtInBestiary}
+              onAddMonsterToScene={activeScene ? addMonsterFromBestiary : undefined}
+              onClose={() => setIsBestiaryModalOpen(false)}
+            />
+          ) : (
+            <LibraryLoadingModal
+              error={bestiaryLoadError}
+              label="Бестиарий"
+              onClose={() => setIsBestiaryModalOpen(false)}
+            />
+          )}
+        </Suspense>
       ) : null}
     </main>
 
@@ -47660,8 +39033,3 @@ export function GmWindow() {
 
 
 }
-
-
-
-
-
