@@ -5,6 +5,7 @@ import type {
   MapGridSettings,
   MapLayerInstance,
   MapViewport,
+  MonsterBlock,
   ProjectState,
   SceneRuntimeState,
   ServiceMarker,
@@ -202,8 +203,45 @@ function repairStringFields<T>(value: T): T {
   return value
 }
 
+function normalizeMonsterBlock(monster: MonsterBlock): MonsterBlock {
+  return {
+    ...monster,
+    imageAssetId: monster.imageAssetId ?? null,
+    imageSrc: monster.imageSrc ?? null,
+  }
+}
+
+function collectAdventureMonsterLibrary(adventure: Adventure): MonsterBlock[] {
+  const explicitLibrary = (adventure as Adventure & { monsterLibrary?: MonsterBlock[] }).monsterLibrary
+
+  if (
+    Array.isArray(explicitLibrary) &&
+    (explicitLibrary.length > 0 || (adventure.scenes ?? []).every((scene) => (scene.monsterBlocks ?? []).length === 0))
+  ) {
+    return explicitLibrary.map(normalizeMonsterBlock)
+  }
+
+  const seen = new Set<string>()
+  const monsters: MonsterBlock[] = []
+
+  for (const scene of adventure.scenes ?? []) {
+    for (const monster of scene.monsterBlocks ?? []) {
+      if (seen.has(monster.id)) {
+        continue
+      }
+
+      seen.add(monster.id)
+      monsters.push(normalizeMonsterBlock(monster))
+    }
+  }
+
+  return monsters
+}
+
 function normalizeAdventure(adventure: Adventure): Adventure {
   const repairedAdventure = repairStringFields(adventure)
+  const monsterLibrary = collectAdventureMonsterLibrary(repairedAdventure)
+  const adventureMonsterIds = new Set(monsterLibrary.map((monster) => monster.id))
 
   return {
     ...repairedAdventure,
@@ -229,48 +267,56 @@ function normalizeAdventure(adventure: Adventure): Adventure {
         spells: character.spellcasting?.spells ?? [],
       },
     })),
-    scenes: (repairedAdventure.scenes ?? []).map((scene) => ({
-      ...scene,
-      splash: {
-        title: pickReadableString(scene.splash?.title ?? '', scene.title),
-        subtitle: pickReadableString(scene.splash?.subtitle ?? '', scene.location),
-        body: pickReadableString(scene.splash?.body ?? '', scene.gmSummary ?? ''),
-        imageAssetId: scene.splash?.imageAssetId ?? null,
-        imageSrc: scene.splash?.imageSrc ?? null,
-      },
-      zones: (scene.zones ?? []).map((zone) => ({
-        ...zone,
-        focusNote: zone.focusNote ?? '',
-        linkedHandoutId:
-          scene.handouts?.some((handout) => handout.id === zone.linkedHandoutId)
-            ? zone.linkedHandoutId
-            : null,
-        linkedCheckId:
-          scene.checksClues?.some((entry) => entry.id === zone.linkedCheckId)
-            ? zone.linkedCheckId
-            : null,
-        linkedMonsterId:
-          scene.monsterBlocks?.some((monster) => monster.id === zone.linkedMonsterId)
-            ? zone.linkedMonsterId
-            : null,
-        autoRevealOnEnter: zone.autoRevealOnEnter ?? false,
-      })),
-      map: {
-        ...scene.map,
-        imageAssetId: scene.map.imageAssetId ?? null,
-        imageSrc: scene.map.imageSrc ?? null,
-      },
-      handouts: (scene.handouts ?? []).map((handout) => ({
-        ...handout,
-        imageAssetId: handout.imageAssetId ?? null,
-        imageSrc: handout.imageSrc ?? null,
-      })),
-      monsterBlocks: (scene.monsterBlocks ?? []).map((monster) => ({
-        ...monster,
-        imageAssetId: monster.imageAssetId ?? null,
-        imageSrc: monster.imageSrc ?? null,
-      })),
-    })),
+    scenes: (repairedAdventure.scenes ?? []).map((scene) => {
+      const rawMonsterIds = Array.isArray((scene as AdventureScene & { monsterIds?: string[] }).monsterIds)
+        ? (scene as AdventureScene & { monsterIds?: string[] }).monsterIds
+        : (scene.monsterBlocks ?? []).map((monster) => monster.id)
+      const monsterIds = Array.from(new Set(rawMonsterIds)).filter((monsterId) => adventureMonsterIds.has(monsterId))
+      const sceneMonsterIds = new Set(monsterIds)
+
+      return {
+        ...scene,
+        splash: {
+          title: pickReadableString(scene.splash?.title ?? '', scene.title),
+          subtitle: pickReadableString(scene.splash?.subtitle ?? '', scene.location),
+          body: pickReadableString(scene.splash?.body ?? '', scene.gmSummary ?? ''),
+          imageAssetId: scene.splash?.imageAssetId ?? null,
+          imageSrc: scene.splash?.imageSrc ?? null,
+        },
+        zones: (scene.zones ?? []).map((zone) => ({
+          ...zone,
+          focusNote: zone.focusNote ?? '',
+          linkedHandoutId:
+            scene.handouts?.some((handout) => handout.id === zone.linkedHandoutId)
+              ? zone.linkedHandoutId
+              : null,
+          linkedCheckId:
+            scene.checksClues?.some((entry) => entry.id === zone.linkedCheckId)
+              ? zone.linkedCheckId
+              : null,
+          linkedMonsterId:
+            sceneMonsterIds.has(zone.linkedMonsterId ?? '')
+              ? zone.linkedMonsterId
+              : null,
+          autoRevealOnEnter: zone.autoRevealOnEnter ?? false,
+        })),
+        map: {
+          ...scene.map,
+          imageAssetId: scene.map.imageAssetId ?? null,
+          imageSrc: scene.map.imageSrc ?? null,
+        },
+        handouts: (scene.handouts ?? []).map((handout) => ({
+          ...handout,
+          imageAssetId: handout.imageAssetId ?? null,
+          imageSrc: handout.imageSrc ?? null,
+        })),
+        monsterIds,
+        monsterBlocks: (scene.monsterBlocks ?? []).map((monster) => ({
+          ...normalizeMonsterBlock(monster),
+        })),
+      }
+    }),
+    monsterLibrary,
   }
 }
 
@@ -359,6 +405,7 @@ function normalizeTokenSpace(token: Partial<TokenInstance> & { size?: number }) 
 function syncSceneRuntimeStateWithScene(
   scene: AdventureScene,
   currentSceneState?: SceneRuntimeState,
+  monsterLibrary: MonsterBlock[] = [],
 ): SceneRuntimeState {
   const nextState = repairStringFields(
     currentSceneState ?? createInitialSceneRuntimeState(scene),
@@ -414,7 +461,7 @@ function syncSceneRuntimeStateWithScene(
     (token, index) => ({
       ...token,
       linkedMonsterId:
-        scene.monsterBlocks?.some((monster) => monster.id === token.linkedMonsterId)
+        monsterLibrary.some((monster) => monster.id === token.linkedMonsterId)
           ? token.linkedMonsterId
           : null,
       linkedCharacterId: token.linkedCharacterId ?? null,
@@ -425,6 +472,7 @@ function syncSceneRuntimeStateWithScene(
       hitPointsCurrent:
         typeof token.hitPointsCurrent === 'number' ? token.hitPointsCurrent : null,
       hitPointsMax: typeof token.hitPointsMax === 'number' ? token.hitPointsMax : null,
+      hitPointsTemp: typeof token.hitPointsTemp === 'number' ? token.hitPointsTemp : null,
       initiative: typeof token.initiative === 'number' ? token.initiative : null,
       zIndex: token.zIndex ?? 10 + index,
     }),
@@ -507,29 +555,36 @@ export function syncSessionStateWithAdventure(
   adventure: Adventure,
   currentSession: SessionState,
 ): SessionState {
+  const monsterLibrary = adventure.monsterLibrary ?? []
   const existingIds = new Set(adventure.scenes.map((scene) => scene.id))
   const firstSceneId = adventure.scenes[0]?.id ?? null
 
   const nextSceneStates = Object.fromEntries(
-    adventure.scenes.map((scene) => [
-      scene.id,
-      syncSceneRuntimeStateWithScene(scene, currentSession.sceneStates[scene.id]),
-    ]),
+    adventure.scenes.map((scene) => {
+      const sceneMonsterIds = new Set(scene.monsterIds ?? [])
+      const sceneMonsters = monsterLibrary.filter((monster) => sceneMonsterIds.has(monster.id))
+
+      return [
+        scene.id,
+        syncSceneRuntimeStateWithScene(scene, currentSession.sceneStates[scene.id], sceneMonsters),
+      ]
+    }),
   )
 
   const nextSceneId = currentSession.playerDisplay.sceneId
   const safeSceneId = nextSceneId && existingIds.has(nextSceneId) ? nextSceneId : firstSceneId
 
   let safeHandoutId = currentSession.playerDisplay.activeHandoutId
+  const safeMode = currentSession.playerDisplay.mode === 'handout' ? 'map' : currentSession.playerDisplay.mode
 
-  if (currentSession.playerDisplay.mode === 'handout' && safeSceneId) {
+  if ((safeMode === 'map' || currentSession.playerDisplay.mode === 'handout') && safeSceneId) {
     const scene = adventure.scenes.find((entry) => entry.id === safeSceneId)
     const handoutExists = scene?.handouts.some(
       (entry) => entry.id === safeHandoutId,
     )
 
     if (!handoutExists) {
-      safeHandoutId = scene?.handouts[0]?.id ?? null
+      safeHandoutId = null
     }
   } else {
     safeHandoutId = null
@@ -539,6 +594,7 @@ export function syncSessionStateWithAdventure(
     playerDisplay: {
       ...currentSession.playerDisplay,
       sceneId: safeSceneId,
+      mode: safeMode,
       activeHandoutId: safeHandoutId,
       updatedAt: new Date().toISOString(),
     },

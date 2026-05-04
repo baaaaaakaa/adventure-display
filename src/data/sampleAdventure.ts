@@ -20,6 +20,7 @@ export const sampleAdventure: Adventure = {
     },
   ],
   characters: [],
+  monsterLibrary: [],
   scenes: [
     {
       id: 'arrival',
@@ -57,6 +58,7 @@ export const sampleAdventure: Adventure = {
           outcome: 'Партия замечает свежие грязные следы, ведущие к крыльцу.',
         },
       ],
+      monsterIds: [],
       monsterBlocks: [],
       recommendedAudio: ['storm-ambience'],
       objectives: [
@@ -100,6 +102,7 @@ export const sampleAdventure: Adventure = {
           outcome: 'Дети кажутся напуганными, но явно не бурей снаружи.',
         },
       ],
+      monsterIds: ['animated-armor'],
       monsterBlocks: [
         {
           id: 'beldora',
@@ -198,6 +201,7 @@ export const sampleAdventure: Adventure = {
           outcome: 'Лёгкий сквозняк подсказывает, что за одной из стен скрыта пустота.',
         },
       ],
+      monsterIds: [],
       monsterBlocks: [],
       recommendedAudio: ['foyer-drone'],
       objectives: [

@@ -27,6 +27,19 @@ function getAvatarKindClassName(token: TokenInstance) {
   }
 }
 
+function formatHitPointsMax(token: TokenInstance) {
+  const maxHitPoints = token.hitPointsMax ?? '—'
+  const tempHitPoints = token.hitPointsTemp
+
+  return typeof tempHitPoints === 'number' && tempHitPoints > 0
+    ? `${maxHitPoints} (+${tempHitPoints})`
+    : String(maxHitPoints)
+}
+
+function formatTokenHitPoints(token: TokenInstance) {
+  return `${token.hitPointsCurrent ?? '—'}/${formatHitPointsMax(token)}`
+}
+
 export function InitiativeTracker({
   focusToken,
   hiddenTokenCount,
@@ -107,7 +120,7 @@ export function InitiativeTracker({
           </strong>
           <span aria-hidden="true" className={styles.divider}>/</span>
           <span className={styles.meta}>
-            {`ХП ${focusToken.hitPointsCurrent ?? '—'}/${focusToken.hitPointsMax ?? '—'}`}
+            {`ХП ${formatTokenHitPoints(focusToken)}`}
           </span>
         </div>
       ) : null}

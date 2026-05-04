@@ -170,14 +170,14 @@ function MonsterCard({
             <h3>{monster.name}</h3>
             {onAdd ? (
               <button
-                aria-label={`Добавить ${monster.name} в сцену`}
+                aria-label={`Добавить ${monster.name} в приключение`}
                 className={styles.editSpellButton}
                 onClick={(event) => {
                   event.stopPropagation()
                   onAdd()
                 }}
                 onKeyDown={(event) => event.stopPropagation()}
-                title="Добавить в сцену"
+                title="Добавить в приключение"
                 type="button"
               >
                 <i aria-hidden="true" className="fa-solid fa-plus" />
@@ -318,7 +318,7 @@ function MonsterDetailCard({
         {onAddMonsterToScene ? (
           <div className={styles.detailFooter}>
             <button className={styles.saveButton} onClick={() => onAddMonsterToScene(monster)} type="button">
-              Добавить в сцену
+              Добавить в приключение
             </button>
           </div>
         ) : null}

@@ -14,8 +14,10 @@ The root object must contain:
 - `id`: stable machine-readable identifier
 - `title`: player-safe adventure title
 - `subtitle`: short GM-facing descriptor for the scenario
+- `assetLibrary`: reusable image/audio assets embedded in or linked from the project
 - `audioLibrary`: reusable library of local music, ambience, and sfx tracks
 - `characters`: reusable player character cards for the whole adventure
+- `monsterLibrary`: reusable monster/NPC stat blocks for the adventure
 - `scenes`: ordered array of scenes
 
 Example:
@@ -25,8 +27,10 @@ Example:
   "id": "death-house",
   "title": "Death House",
   "subtitle": "Local GM station with a dedicated player display",
+  "assetLibrary": [],
   "audioLibrary": [],
   "characters": [],
+  "monsterLibrary": [],
   "scenes": []
 }
 ```
@@ -55,12 +59,15 @@ Each scene must contain:
 - `id`: unique scene id inside the adventure
 - `title`: scene label
 - `location`: short place label
-- `accent`: one of `ember`, `gold`, `teal`
+- `accent`: one of `amber`, `crimson`, `ember`, `gold`, `olive`, `rose`, `slate`, `teal`, `violet`
 - `gmSummary`: short private summary for the GM
 - `gmNotes`: hidden GM-only operating notes
+- `splash`: player-facing full-screen splash definition
 - `map`: map definition for the scene
+- `zones`: revealable/annotated map zones
 - `handouts`: array of revealable handouts
 - `checksClues`: GM table of checks and clue outcomes
+- `monsterIds`: ids of monsters from the adventure monster library used in the scene
 - `monsterBlocks`: array of GM-only monster or NPC stat blocks
 - `recommendedAudio`: array of track ids from `audioLibrary`
 - `objectives`: array of short GM goals for the scene
@@ -75,13 +82,20 @@ Example:
   "accent": "gold",
   "gmSummary": "First interior room after the party commits to entering.",
   "gmNotes": "Lock the doors after the party commits.",
+  "splash": {
+    "title": "The Foyer",
+    "subtitle": "Ground Floor",
+    "body": "The house settles into silence."
+  },
   "map": {
     "id": "foyer-map",
     "title": "Foyer Map",
     "placeholder": "Upload the foyer battle map here."
   },
+  "zones": [],
   "handouts": [],
   "checksClues": [],
+  "monsterIds": [],
   "monsterBlocks": [],
   "recommendedAudio": ["foyer-drone"],
   "objectives": [

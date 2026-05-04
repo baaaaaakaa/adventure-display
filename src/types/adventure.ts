@@ -280,6 +280,7 @@ export interface AdventureScene {
   zones: MapZone[]
   handouts: Handout[]
   checksClues: CheckClueEntry[]
+  monsterIds: string[]
   monsterBlocks: MonsterBlock[]
   recommendedAudio: string[]
   objectives: string[]
@@ -292,6 +293,7 @@ export interface Adventure {
   assetLibrary: AssetRecord[]
   audioLibrary: AudioTrack[]
   characters: PlayerCharacter[]
+  monsterLibrary: MonsterBlock[]
   scenes: AdventureScene[]
 }
 
@@ -310,6 +312,7 @@ export interface TokenInstance {
   hiddenFromPlayers: boolean
   hitPointsCurrent?: number | null
   hitPointsMax?: number | null
+  hitPointsTemp?: number | null
   initiative?: number | null
   conditions?: string[]
   zIndex: number

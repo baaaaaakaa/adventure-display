@@ -1,4 +1,5 @@
 import type { MonsterBlock, MonsterFeature } from '../types/adventure'
+import { resolvePublicAssetSrc } from './publicAssets'
 
 type RawRecord = Record<string, unknown>
 
@@ -43,22 +44,6 @@ function readFeatureList(value: unknown): MonsterFeature[] {
     .filter((feature) => feature.title || feature.body)
 }
 
-function resolvePublicAssetSrc(value: unknown) {
-  const src = readString(value)
-
-  if (!src || !src.startsWith('/')) {
-    return src
-  }
-
-  const baseUrl = import.meta.env.BASE_URL || '/'
-
-  if (baseUrl === '/') {
-    return src
-  }
-
-  return `${baseUrl.replace(/\/$/, '')}${src}`
-}
-
 function normalizeMonster(rawMonster: unknown): MonsterBlock | null {
   if (!isRecord(rawMonster)) {
     return null
@@ -81,7 +66,7 @@ function normalizeMonster(rawMonster: unknown): MonsterBlock | null {
     alignment: readString(rawMonster.alignment),
     proficiencyBonus: readString(rawMonster.proficiencyBonus),
     imageAssetId: null,
-    imageSrc: resolvePublicAssetSrc(rawMonster.imageSrc) || null,
+    imageSrc: resolvePublicAssetSrc(readString(rawMonster.imageSrc)) || null,
     armorClass: readString(rawMonster.armorClass),
     hitPoints: readString(rawMonster.hitPoints),
     hitPointsFormula: readString(rawMonster.hitPointsFormula),

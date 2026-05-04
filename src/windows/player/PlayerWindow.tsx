@@ -5,6 +5,7 @@ import {
   getActiveAdventureBundle,
   playerDisplayChannelName,
 } from '../../lib/playerDisplay'
+import { resolvePublicAssetSrc } from '../../lib/publicAssets'
 import { getFogCellRects, getZoneFogRect } from '../../lib/fog'
 import { defaultMapGrid, tokenSpaceFootprints } from '../../types/adventure'
 import type { ProjectState } from '../../types/adventure'
@@ -124,7 +125,6 @@ export function PlayerWindow() {
               ) : null}
               <article className="handout-copy">
                 <div className="handout-chips">
-                  <span className="eyebrow">{handout.caption}</span>
                   <span className="player-chip">{scene.title}</span>
                 </div>
                 <h1>{handout.title}</h1>
@@ -144,34 +144,13 @@ export function PlayerWindow() {
         key={presentationKey}
       >
         <section className="player-hero splash-stage">
-          <div className="player-overlay"></div>
           {splash.imageSrc ? (
-            <div
-              className="splash-backdrop"
-              style={{ backgroundImage: `url(${splash.imageSrc})` }}
+            <img
+              alt={splash.title || scene.title}
+              className="splash-fullscreen-image"
+              src={splash.imageSrc}
             />
           ) : null}
-          <div
-            className={`player-frame splash-frame ${splash.imageSrc ? 'with-art' : 'text-only'}`}
-          >
-            {splash.imageSrc ? (
-              <div className="splash-hero-image-wrap">
-                <img
-                  alt={splash.title}
-                  className="splash-hero-image"
-                  src={splash.imageSrc}
-                />
-              </div>
-            ) : null}
-            <div className="splash-copy">
-              <div className="handout-chips">
-                <span className="eyebrow">{splash.subtitle || scene.location}</span>
-                <span className="player-chip">Сцена</span>
-              </div>
-              <h1>{splash.title || scene.title}</h1>
-              <p>{splash.body || scene.gmSummary}</p>
-            </div>
-          </div>
         </section>
       </main>
     )
@@ -188,10 +167,7 @@ export function PlayerWindow() {
           <div className="player-frame player-standby-frame">
             <div className="standby-chip-row">
               <span className="eyebrow">Пауза</span>
-              <span className="player-chip">{scene.location}</span>
-              <span className="player-chip">{scene.map.title}</span>
             </div>
-            <h1>{scene.title}</h1>
             <p>Игра на паузе. Ждите следующую карту, новую раздатку или переход к новой сцене.</p>
             <div className="standby-meta">
               <strong>На общем экране скоро появится новый показ.</strong>
@@ -365,7 +341,7 @@ export function PlayerWindow() {
                 />
                 <image
                   className="fog-player-texture"
-                  href="/fog-pattern.png"
+                  href={resolvePublicAssetSrc('/fog-pattern.png')}
                   x="0"
                   y="0"
                   width="100"
@@ -390,6 +366,20 @@ export function PlayerWindow() {
               <span className="eyebrow">{scene.map.title}</span>
               <strong>Карта пока не загружена</strong>
               <p>{scene.map.placeholder}</p>
+            </div>
+          ) : null}
+
+          {handout ? (
+            <div className="handout-modal-backdrop player-handout-modal" role="presentation">
+              <article className={`handout-modal-card ${handout.imageSrc ? 'with-art' : 'text-only'}`}>
+                {handout.title ? <h2>{handout.title}</h2> : null}
+                {handout.imageSrc ? (
+                  <figure className="handout-modal-figure">
+                    <img alt={handout.title} className="handout-modal-image" src={handout.imageSrc} />
+                  </figure>
+                ) : null}
+                {handout.body ? <p>{handout.body}</p> : null}
+              </article>
             </div>
           ) : null}
 

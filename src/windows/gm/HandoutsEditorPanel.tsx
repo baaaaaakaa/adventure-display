@@ -1,4 +1,4 @@
-import { StyledSelect } from '../../components/StyledSelect'
+﻿import { StyledSelect } from '../../components/StyledSelect'
 import type { AssetRecord, Handout } from '../../types/adventure'
 import styles from './HandoutsEditorPanel.module.css'
 
@@ -74,7 +74,6 @@ export function HandoutsEditorPanel({
               type="button"
             >
               <strong>{handout.title}</strong>
-              <span>{handout.caption}</span>
             </button>
           ))}
         </div>
@@ -116,18 +115,6 @@ export function HandoutsEditorPanel({
             />
           </label>
 
-          <label className="field">
-            <span>Подпись</span>
-            <input
-              onChange={(event) =>
-                onUpdateHandout(activeHandout.id, (handout) => ({
-                  ...handout,
-                  caption: event.target.value,
-                }))
-              }
-              value={activeHandout.caption}
-            />
-          </label>
 
           <label className="field">
             <span>Изображение из библиотеки</span>

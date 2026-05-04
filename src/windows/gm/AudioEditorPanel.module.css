@@ -1,129 +1,282 @@
-.uploadGrid,
-.list,
+.trackPicker,
 .playerCard {
   display: grid;
-  gap: 12px;
+  gap: 6px;
 }
 
 .playerCard {
-  padding-top: 8px;
-  border-top: 1px solid rgba(58, 43, 31, 0.1);
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid rgba(58, 43, 31, 0.1);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.72);
 }
 
-.playerCard h3 {
-  margin: 0.2rem 0 0;
-  font-family: var(--display);
-  font-size: 1.35rem;
+.playerHeader {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.playerTitle {
+  min-width: 0;
+}
+
+.headerActions {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
 }
 
 .controls {
   display: flex;
   flex-wrap: wrap;
-  gap: 10px;
-}
-
-.settingsGrid {
-  display: grid;
-  gap: 12px;
-}
-
-.card {
-  text-align: left;
-  display: grid;
   gap: 6px;
-  padding: 14px 16px;
-  border-radius: 18px;
-  border: 1px solid transparent;
-  background: rgba(255, 255, 255, 0.55);
+}
+
+.transportButton,
+.iconButton {
+  display: inline-grid;
+  place-items: center;
+  width: 34px;
+  min-width: 34px;
+  height: 34px;
+  padding: 0;
+  border: 1px solid rgba(58, 43, 31, 0.14);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.76);
   color: var(--text);
+  cursor: pointer;
+  transition:
+    transform 160ms ease,
+    border-color 160ms ease,
+    background 160ms ease,
+    color 160ms ease;
 }
 
-.card strong {
-  min-width: 0;
-  overflow-wrap: anywhere;
-}
-
-.active {
-  border-color: rgba(198, 95, 63, 0.28);
-  background: rgba(255, 255, 255, 0.92);
-}
-
-.cardHeader {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  flex-wrap: wrap;
-}
-
-.meta {
-  font-size: 0.86rem;
-  color: var(--text-muted);
-}
-
-.kind {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 4px 10px;
-  border-radius: 999px;
-  font-size: 0.72rem;
-  font-weight: 700;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-}
-
-.kindMusic {
-  background: rgba(198, 95, 63, 0.14);
+.transportButton:hover,
+.transportButton:focus-visible,
+.iconButton:hover,
+.iconButton:focus-visible {
+  border-color: rgba(198, 95, 63, 0.32);
+  background: rgba(255, 255, 255, 0.95);
   color: var(--ember);
+  transform: translateY(-1px);
 }
 
-.kindAmbience {
+.transportButton:disabled,
+.transportButton:disabled:hover,
+.transportButton:disabled:focus-visible {
+  border-color: rgba(58, 43, 31, 0.1);
+  background: rgba(255, 255, 255, 0.45);
+  color: rgba(108, 90, 74, 0.52);
+  cursor: not-allowed;
+  transform: none;
+}
+
+.playButton {
+  border-color: rgba(198, 95, 63, 0.32);
+  background: var(--ember);
+  color: var(--text-invert);
+}
+
+.playButton:hover,
+.playButton:focus-visible {
+  background: #a74d33;
+  color: var(--text-invert);
+}
+
+.activeLoopButton {
+  border-color: rgba(46, 122, 120, 0.34);
   background: rgba(46, 122, 120, 0.14);
   color: var(--teal);
 }
 
-.kindSfx {
-  background: rgba(174, 123, 51, 0.18);
-  color: var(--gold);
+.activeLoopButton:hover,
+.activeLoopButton:focus-visible {
+  border-color: rgba(46, 122, 120, 0.48);
+  color: var(--teal);
 }
 
-:global(.scene-editor-panel.is-modal-open) .uploadGrid,
-:global(.scene-editor-panel.is-modal-open) .list {
+.deleteButton:hover,
+.deleteButton:focus-visible {
+  border-color: rgba(136, 40, 40, 0.26);
+  color: #8e3127;
+}
+
+.compactFields {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 6px;
+  align-items: end;
+}
+
+.compactFields > * {
+  grid-column: 1 / -1;
+}
+
+.compactFields :global(input),
+.trackSearch input {
+  min-height: 32px;
+  padding: 5px 9px;
+  border-radius: 9px;
+}
+
+.compactFields :global(.checkbox-field) {
+  min-height: 32px;
+}
+
+.compactFields :global(.range-field input) {
+  padding: 0;
+}
+
+.trackPicker > span {
+  color: var(--text-muted);
+  font-size: 0.76rem;
+  font-weight: 600;
+  padding-left: 12px;
+}
+
+.trackDropdown {
+  position: relative;
+  min-width: 0;
+}
+
+.trackTrigger {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+  width: 100%;
+  min-height: 36px;
+  padding: 7px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.7);
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+}
+
+.trackTrigger span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.trackTrigger i {
+  color: var(--text-muted);
+  font-size: 0.75rem;
+  transition: transform 160ms ease;
+}
+
+.open .trackTrigger i {
+  transform: rotate(180deg);
+}
+
+.trackMenu {
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  display: grid;
+  gap: 8px;
+  max-height: min(300px, 46vh);
+  padding: 8px;
+  overflow: auto;
+  border: 1px solid rgba(58, 43, 31, 0.14);
+  border-radius: 12px;
+  background: rgba(250, 247, 240, 0.98);
+  box-shadow: 0 16px 36px rgba(34, 25, 18, 0.18);
+}
+
+.trackSearch {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 8px;
+  align-items: center;
+  min-height: 36px;
+  padding: 0 10px;
+  border: 1px solid rgba(58, 43, 31, 0.1);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.74);
+}
+
+.trackSearch i {
+  color: var(--text-muted);
+  font-size: 0.76rem;
+}
+
+.trackSearch input {
+  min-width: 0;
+  min-height: 34px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.trackOptions {
+  display: grid;
+  gap: 4px;
+}
+
+.trackOption {
+  display: grid;
+  gap: 2px;
+  width: 100%;
+  padding: 7px 10px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+}
+
+.trackOption:hover,
+.trackOption:focus-visible,
+.selectedTrack {
+  background: rgba(198, 95, 63, 0.1);
+}
+
+.trackOptionName,
+.trackOptionMeta {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.trackOptionName {
+  font-size: 0.86rem;
+  font-weight: 600;
+}
+
+.trackOptionMeta {
+  font-size: 0.76rem;
+  color: var(--text-muted);
+}
+
+:global(.scene-editor-panel.is-modal-open) .trackPicker {
   gap: 8px;
 }
 
-:global(.scene-editor-panel.is-modal-open) .uploadGrid {
-  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-}
-
-:global(.scene-editor-panel.is-modal-open) .card {
-  gap: 5px;
-  padding: 12px 13px;
-  border-radius: 16px;
-}
-
 :global(.scene-editor-panel.is-modal-open) .playerCard {
-  gap: 10px;
-  padding: 14px;
-  border-top: 0;
-  border-radius: 18px;
-  background: rgba(255, 255, 255, 0.72);
-  border: 1px solid rgba(58, 43, 31, 0.1);
+  gap: 7px;
+  padding: 9px;
 }
 
 :global(.scene-editor-panel.is-modal-open) .controls {
   gap: 8px;
 }
 
-:global(.scene-editor-panel.is-modal-open) .controls :global(.primary-button),
-:global(.scene-editor-panel.is-modal-open) .controls :global(.ghost-button) {
-  min-height: 40px;
-  padding: 8px 14px;
-  border-radius: 14px;
-}
-
-:global(.scene-editor-panel.is-modal-open) .kind {
-  padding: 3px 9px;
-  font-size: 0.68rem;
+:global(.scene-editor-panel.is-modal-open) .transportButton {
+  width: 34px;
+  min-width: 34px;
+  height: 34px;
 }

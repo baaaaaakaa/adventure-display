@@ -1,9 +1,10 @@
 import { StyledSelect } from '../../components/StyledSelect'
-import type { AdventureScene, MapZone } from '../../types/adventure'
+import type { AdventureScene, MapZone, MonsterBlock } from '../../types/adventure'
 import styles from './ZoneModal.module.css'
 
 type ZoneModalProps = {
   activeScene: AdventureScene
+  monsters: MonsterBlock[]
   zone: MapZone
   onClose: () => void
   onRemoveZone: (zoneId: string) => void
@@ -12,6 +13,7 @@ type ZoneModalProps = {
 
 export function ZoneModal({
   activeScene,
+  monsters,
   zone,
   onClose,
   onRemoveZone,
@@ -200,7 +202,7 @@ export function ZoneModal({
               value={zone.linkedMonsterId ?? ''}
             >
               <option value="">не привязан</option>
-              {activeScene.monsterBlocks.map((monster) => (
+              {monsters.map((monster) => (
                 <option key={monster.id} value={monster.id}>
                   {monster.name}
                 </option>

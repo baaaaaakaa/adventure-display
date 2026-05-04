@@ -1,12 +1,7 @@
+import { useMemo, useState } from 'react'
 import { StyledSelect } from '../../components/StyledSelect'
-import type { AssetRecord, AudioTrack, AudioTrackKind } from '../../types/adventure'
+import type { AssetRecord, AudioTrack } from '../../types/adventure'
 import styles from './AudioEditorPanel.module.css'
-
-const audioKindLabels: Record<AudioTrackKind, string> = {
-  music: 'Музыка',
-  ambience: 'Атмосфера',
-  sfx: 'Эффект',
-}
 
 type AudioEditorPanelProps = {
   activeTrack: AudioTrack | null
@@ -14,14 +9,8 @@ type AudioEditorPanelProps = {
   audioLoop: boolean
   audioTracks: AudioTrack[]
   audioVolume: number
-  isAudioPlaying: boolean
-  newAudioKind: AudioTrackKind
-  newAudioTitle: string
   recommendedAudioIds: string[]
-  onAddAudioTrack: (file: File | null) => void | Promise<void>
   onApplyLibraryAudioToTrack: (trackId: string, assetId: string) => void
-  onNewAudioKindChange: (kind: AudioTrackKind) => void
-  onNewAudioTitleChange: (title: string) => void
   onPauseAudioPlayback: () => void
   onPlayAudioTrack: (trackId: string) => void | Promise<void>
   onRemoveAudioTrack: (trackId: string) => void
@@ -33,31 +22,14 @@ type AudioEditorPanelProps = {
   onUpdateAudioTrack: (trackId: string, updater: (track: AudioTrack) => AudioTrack) => void
 }
 
-function getAudioKindClassName(kind: AudioTrackKind) {
-  return [
-    styles.kind,
-    kind === 'music' ? styles.kindMusic : '',
-    kind === 'ambience' ? styles.kindAmbience : '',
-    kind === 'sfx' ? styles.kindSfx : '',
-  ]
-    .filter(Boolean)
-    .join(' ')
-}
-
 export function AudioEditorPanel({
   activeTrack,
   audioAssets,
   audioLoop,
   audioTracks,
   audioVolume,
-  isAudioPlaying,
-  newAudioKind,
-  newAudioTitle,
   recommendedAudioIds,
-  onAddAudioTrack,
   onApplyLibraryAudioToTrack,
-  onNewAudioKindChange,
-  onNewAudioTitleChange,
   onPauseAudioPlayback,
   onPlayAudioTrack,
   onRemoveAudioTrack,
@@ -68,6 +40,26 @@ export function AudioEditorPanel({
   onToggleSceneAudioRecommendation,
   onUpdateAudioTrack,
 }: AudioEditorPanelProps) {
+  const [isTrackListOpen, setIsTrackListOpen] = useState(false)
+  const [trackSearch, setTrackSearch] = useState('')
+  const filteredTracks = useMemo(() => {
+    const searchValue = trackSearch.trim().toLocaleLowerCase('ru-RU')
+
+    if (!searchValue) {
+      return audioTracks
+    }
+
+    return audioTracks.filter((track) =>
+      [track.title]
+        .filter(Boolean)
+        .some((value) => value.toLocaleLowerCase('ru-RU').includes(searchValue)),
+    )
+  }, [audioTracks, trackSearch])
+  const isActiveTrackRecommended = activeTrack ? recommendedAudioIds.includes(activeTrack.id) : false
+  const activeTrackHasFile = activeTrack
+    ? Boolean(activeTrack.src || (activeTrack.assetId && audioAssets.some((asset) => asset.id === activeTrack.assetId)))
+    : false
+
   return (
     <div className="editor-card">
       <div className="section-row scene-editor-card-title-row">
@@ -75,87 +67,171 @@ export function AudioEditorPanel({
         <strong>{recommendedAudioIds.length} треков в сцене</strong>
       </div>
 
-      <div className={styles.uploadGrid}>
-        <label className="field">
-          <span>Название трека</span>
-          <input
-            onChange={(event) => onNewAudioTitleChange(event.target.value)}
-            placeholder="Введи название, затем выбери файл"
-            value={newAudioTitle}
-          />
-        </label>
-
-        <label className="field">
-          <span>Тип трека</span>
-          <StyledSelect
-            onChange={(event) => onNewAudioKindChange(event.target.value as AudioTrackKind)}
-            value={newAudioKind}
+      <div className={styles.trackPicker}>
+        <span>Доступные треки</span>
+        <div className={`${styles.trackDropdown} ${isTrackListOpen ? styles.open : ''}`}>
+          <button
+            aria-expanded={isTrackListOpen}
+            aria-haspopup="listbox"
+            className={styles.trackTrigger}
+            onClick={() => setIsTrackListOpen((isOpen) => !isOpen)}
+            type="button"
           >
-            <option value="music">Музыка</option>
-            <option value="ambience">Атмосфера</option>
-            <option value="sfx">Эффект</option>
-          </StyledSelect>
-        </label>
+            <span>{activeTrack ? activeTrack.title : 'Выбрать трек'}</span>
+            <i aria-hidden="true" className="fa-solid fa-chevron-down" />
+          </button>
 
-        <label className="field file-field">
-          <span>Загрузить аудио</span>
-          <span className="file-upload-control">
-            <span className="file-upload-button" aria-hidden="true">
-              <i className="fa-solid fa-plus" />
-            </span>
-            <span className="file-upload-name">
-              {newAudioTitle.trim() ? `${newAudioTitle.trim()}` : 'Файл не выбран'}
-            </span>
-          </span>
-          <input
-            accept="audio/*"
-            className="visually-hidden"
-            onChange={(event) => {
-              void onAddAudioTrack(event.target.files?.[0] ?? null)
-              event.target.value = ''
-            }}
-            type="file"
-          />
-        </label>
+          {isTrackListOpen ? (
+            <div className={styles.trackMenu} role="listbox">
+              <label className={styles.trackSearch}>
+                <i aria-hidden="true" className="fa-solid fa-magnifying-glass" />
+                <input
+                  autoFocus
+                  onChange={(event) => setTrackSearch(event.target.value)}
+                  placeholder="Поиск трека"
+                  value={trackSearch}
+                />
+              </label>
+
+              <div className={styles.trackOptions}>
+                {filteredTracks.map((track) => {
+                  const isRecommended = recommendedAudioIds.includes(track.id)
+                  const isSelected = track.id === activeTrack?.id
+
+                  return (
+                    <button
+                      aria-selected={isSelected}
+                      className={`${styles.trackOption} ${isSelected ? styles.selectedTrack : ''}`}
+                      key={track.id}
+                      onClick={() => {
+                        onSelectAudioTrack(track.id)
+                        setIsTrackListOpen(false)
+                        setTrackSearch('')
+                      }}
+                      role="option"
+                      type="button"
+                    >
+                      <span className={styles.trackOptionName}>{track.title}</span>
+                      <span className={styles.trackOptionMeta}>
+                        {isRecommended ? 'в сцене' : 'в библиотеке'}
+                      </span>
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+          ) : null}
+        </div>
       </div>
 
       {activeTrack ? (
         <div className={styles.playerCard}>
-          <div className="section-row">
-            <div>
+          <div className={styles.playerHeader}>
+            <div className={styles.playerTitle}>
               <span className="eyebrow">Выбранный трек</span>
-              <h3>{activeTrack.title}</h3>
             </div>
-            <span className={getAudioKindClassName(activeTrack.kind)}>
-              {audioKindLabels[activeTrack.kind]}
-            </span>
+            <div className={styles.headerActions}>
+              <button
+                aria-label={isActiveTrackRecommended ? 'Убрать из сцены' : 'Добавить в сцену'}
+                className={styles.iconButton}
+                data-tooltip={isActiveTrackRecommended ? 'Убрать из сцены' : 'Добавить в сцену'}
+                onClick={() => onToggleSceneAudioRecommendation(activeTrack.id)}
+                title={isActiveTrackRecommended ? 'Убрать из сцены' : 'Добавить в сцену'}
+                type="button"
+              >
+                <i aria-hidden="true" className={`fa-solid ${isActiveTrackRecommended ? 'fa-minus' : 'fa-plus'}`} />
+              </button>
+              <button
+                aria-label="Удалить трек"
+                className={`${styles.iconButton} ${styles.deleteButton}`}
+                data-tooltip="Удалить трек"
+                onClick={() => onRemoveAudioTrack(activeTrack.id)}
+                title="Удалить трек"
+                type="button"
+              >
+                <i aria-hidden="true" className="fa-solid fa-trash" />
+              </button>
+            </div>
           </div>
 
           <div className={styles.controls}>
             <button
-              className="primary-button compact-button"
+              aria-label={activeTrackHasFile ? 'Воспроизвести' : 'Файл не выбран'}
+              className={`${styles.transportButton} ${styles.playButton}`}
+              data-tooltip={activeTrackHasFile ? 'Воспроизвести' : 'Файл не выбран'}
+              disabled={!activeTrackHasFile}
               onClick={() => void onPlayAudioTrack(activeTrack.id)}
+              title={activeTrackHasFile ? 'Воспроизвести' : 'Файл не выбран'}
               type="button"
             >
-              Воспроизвести
+              <i aria-hidden="true" className="fa-solid fa-play" />
             </button>
             <button
-              className="ghost-button compact-button"
+              aria-label="Пауза"
+              className={styles.transportButton}
+              data-tooltip="Пауза"
               onClick={onPauseAudioPlayback}
+              title="Пауза"
               type="button"
             >
-              Пауза
+              <i aria-hidden="true" className="fa-solid fa-pause" />
             </button>
             <button
-              className="ghost-button compact-button"
+              aria-label="Стоп"
+              className={styles.transportButton}
+              data-tooltip="Стоп"
               onClick={onStopAudioPlayback}
+              title="Стоп"
               type="button"
             >
-              Стоп
+              <i aria-hidden="true" className="fa-solid fa-stop" />
+            </button>
+            <button
+              aria-label={audioLoop ? 'Выключить повтор' : 'Зациклить текущий трек'}
+              aria-pressed={audioLoop}
+              className={`${styles.transportButton} ${audioLoop ? styles.activeLoopButton : ''}`}
+              data-tooltip={audioLoop ? 'Повтор включен' : 'Зациклить текущий трек'}
+              onClick={() => onSetAudioLoop(!audioLoop)}
+              title={audioLoop ? 'Повтор включен' : 'Зациклить текущий трек'}
+              type="button"
+            >
+              <i aria-hidden="true" className="fa-solid fa-repeat" />
             </button>
           </div>
 
-          <div className={styles.settingsGrid}>
+          <div className={styles.compactFields}>
+            <label className="field">
+              <span>Название</span>
+              <input
+                onChange={(event) =>
+                  onUpdateAudioTrack(activeTrack.id, (track) => ({
+                    ...track,
+                    title: event.target.value,
+                  }))
+                }
+                value={activeTrack.title}
+              />
+            </label>
+
+            <label className="field">
+              <span>Файл</span>
+              <StyledSelect
+                onChange={(event) => {
+                  if (event.target.value) {
+                    onApplyLibraryAudioToTrack(activeTrack.id, event.target.value)
+                  }
+                }}
+                value={activeTrack.assetId ?? ''}
+              >
+                <option value="">Не выбрано</option>
+                {audioAssets.map((asset) => (
+                  <option key={asset.id} value={asset.id}>
+                    {asset.title}
+                  </option>
+                ))}
+              </StyledSelect>
+            </label>
+
             <label className="field range-field">
               <span>Громкость: {audioVolume}%</span>
               <input
@@ -166,126 +242,9 @@ export function AudioEditorPanel({
                 value={audioVolume}
               />
             </label>
-            <label className="checkbox-field">
-              <input
-                checked={audioLoop}
-                onChange={(event) => onSetAudioLoop(event.target.checked)}
-                type="checkbox"
-              />
-              <span>Зациклить текущий трек</span>
-            </label>
           </div>
-
-          <label className="field">
-            <span>Файл из библиотеки</span>
-            <StyledSelect
-              onChange={(event) => {
-                if (event.target.value) {
-                  onApplyLibraryAudioToTrack(activeTrack.id, event.target.value)
-                }
-              }}
-              value={activeTrack.assetId ?? ''}
-            >
-              <option value="">Не выбрано</option>
-              {audioAssets.map((asset) => (
-                <option key={asset.id} value={asset.id}>
-                  {asset.title}
-                </option>
-              ))}
-            </StyledSelect>
-          </label>
-
-          <label className="field">
-            <span>Название трека</span>
-            <input
-              onChange={(event) =>
-                onUpdateAudioTrack(activeTrack.id, (track) => ({
-                  ...track,
-                  title: event.target.value,
-                }))
-              }
-              value={activeTrack.title}
-            />
-          </label>
-
-          <label className="field">
-            <span>Тип трека</span>
-            <StyledSelect
-              onChange={(event) =>
-                onUpdateAudioTrack(activeTrack.id, (track) => ({
-                  ...track,
-                  kind: event.target.value as AudioTrackKind,
-                }))
-              }
-              value={activeTrack.kind}
-            >
-              <option value="music">Музыка</option>
-              <option value="ambience">Атмосфера</option>
-              <option value="sfx">Эффект</option>
-            </StyledSelect>
-          </label>
-
-          <div className="section-row">
-            <button
-              className="ghost-button compact-button"
-              onClick={() => onToggleSceneAudioRecommendation(activeTrack.id)}
-              type="button"
-            >
-              {recommendedAudioIds.includes(activeTrack.id) ? 'Убрать из сцены' : 'Добавить в сцену'}
-            </button>
-            <button
-              className="inline-link"
-              onClick={() => onRemoveAudioTrack(activeTrack.id)}
-              type="button"
-            >
-              Удалить трек
-            </button>
-          </div>
-
-          {!activeTrack.src ? (
-            <p className="editor-empty">
-              У этого трека пока нет подключенного файла, выбери его в библиотеке или загрузи заново.
-            </p>
-          ) : null}
         </div>
-      ) : (
-        <p className="editor-empty">
-          Трек пока не выбран. Выбери карточку, чтобы открыть настройки звука.
-        </p>
-      )}
-
-      <div className={styles.list}>
-        {audioTracks.map((track) => {
-          const isRecommended = recommendedAudioIds.includes(track.id)
-          const isSelected = track.id === activeTrack?.id
-
-          return (
-            <button
-              key={track.id}
-              className={`${styles.card} ${isSelected ? styles.active : ''}`}
-              onClick={() => onSelectAudioTrack(track.id)}
-              type="button"
-            >
-              <div className={styles.cardHeader}>
-                <strong>{track.title}</strong>
-                <span className={getAudioKindClassName(track.kind)}>
-                  {audioKindLabels[track.kind]}
-                </span>
-              </div>
-              <span className={styles.meta}>
-                {isRecommended ? 'Рекомендован для этой сцены' : 'Только в библиотеке'}
-              </span>
-              <span className={styles.meta}>
-                {track.src
-                  ? isAudioPlaying && isSelected
-                    ? 'Сейчас играет'
-                    : 'Готов к воспроизведению'
-                  : 'Файл не найден'}
-              </span>
-            </button>
-          )
-        })}
-      </div>
+      ) : null}
     </div>
   )
 }

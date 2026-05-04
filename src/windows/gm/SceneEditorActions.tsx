@@ -12,7 +12,7 @@ const sceneEditorActions: Array<{
   { id: 'splash', iconClassName: 'fa-solid fa-image', label: 'Сплеш экран сцены' },
   { id: 'handouts', iconClassName: 'fa-solid fa-note-sticky', label: 'Раздатки' },
   { id: 'checks', iconClassName: 'fa-solid fa-list-check', label: 'Проверки' },
-  { id: 'monsters', iconClassName: 'fa-solid fa-dragon', label: 'Монстры' },
+  { id: 'monsters', iconClassName: 'fa-solid fa-dragon', label: 'Монстры и NPC' },
   { id: 'audio', iconClassName: 'fa-solid fa-music', label: 'Аудио' },
 ]
 

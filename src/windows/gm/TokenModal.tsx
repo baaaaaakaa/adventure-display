@@ -1,8 +1,6 @@
 import { useState } from 'react'
 import { StyledSelect } from '../../components/StyledSelect'
 import {
-  tokenSpaceLabels,
-  tokenSpaceValues,
   type AdventureScene,
   type MonsterBlock,
   type MonsterFeature,
@@ -18,6 +16,7 @@ type TokenModalProps = {
   characters: PlayerCharacter[]
   linkedCharacter: PlayerCharacter | null
   linkedMonster: MonsterBlock | null
+  monsters: MonsterBlock[]
   token: TokenInstance
   onClose: () => void
   onFocusLinkedCharacter: (characterId: string) => void
@@ -548,12 +547,16 @@ function getTokenSpaceFromMonsterSize(size: string): TokenSpace {
   return 'medium'
 }
 
-function applyMonsterToToken(token: TokenInstance, monster: MonsterBlock): TokenInstance {
+function applyMonsterToToken(
+  token: TokenInstance,
+  monster: MonsterBlock,
+  kind: Extract<TokenKind, 'monster' | 'npc'> = 'monster',
+): TokenInstance {
   const hitPointsMax = parseHitPointsValue(monster.hitPoints)
 
   return {
     ...token,
-    kind: 'monster',
+    kind,
     linkedMonsterId: monster.id,
     linkedCharacterId: null,
     name: monster.name || token.name,
@@ -561,6 +564,7 @@ function applyMonsterToToken(token: TokenInstance, monster: MonsterBlock): Token
     space: getTokenSpaceFromMonsterSize(monster.size),
     hitPointsMax,
     hitPointsCurrent: hitPointsMax,
+    hitPointsTemp: null,
   }
 }
 
@@ -576,6 +580,7 @@ function applyCharacterToToken(token: TokenInstance, character: PlayerCharacter)
     space: 'medium',
     hitPointsMax: character.hpMax,
     hitPointsCurrent: character.hpCurrent ?? character.hpMax,
+    hitPointsTemp: null,
     initiative: character.initiative,
   }
 }
@@ -590,6 +595,19 @@ function formatSigned(value: number | null | undefined) {
 
 function formatNumber(value: number | null | undefined) {
   return value ?? '—'
+}
+
+function formatHitPointsMax(token: TokenInstance) {
+  const maxHitPoints = formatNumber(token.hitPointsMax)
+  const tempHitPoints = token.hitPointsTemp
+
+  return typeof tempHitPoints === 'number' && tempHitPoints > 0
+    ? `${maxHitPoints} (+${tempHitPoints})`
+    : String(maxHitPoints)
+}
+
+function formatTokenHitPoints(token: TokenInstance) {
+  return `${formatNumber(token.hitPointsCurrent)} / ${formatHitPointsMax(token)}`
 }
 
 function isFilled(value: string | null | undefined) {
@@ -635,6 +653,7 @@ function resetTokenForKind(token: TokenInstance, kind: TokenKind): TokenInstance
     rotation: 0,
     hitPointsCurrent: null,
     hitPointsMax: null,
+    hitPointsTemp: null,
     initiative: null,
     conditions: [],
   }
@@ -901,7 +920,7 @@ function CharacterPreviewCard({
 }) {
   const stats = [
     ['КД', character.armorClass],
-    ['ХП', `${formatNumber(token.hitPointsCurrent)} / ${formatNumber(token.hitPointsMax)}`],
+    ['ХП', formatTokenHitPoints(token)],
     ['Скорость', character.speed],
     ['БМ', formatSigned(character.proficiencyBonus)],
     ['Иниц.', formatSigned(token.initiative ?? character.initiative)],
@@ -987,17 +1006,19 @@ export function TokenModal({
   characters,
   linkedCharacter,
   linkedMonster,
+  monsters,
   token,
   onClose,
   onFocusLinkedCharacter,
   onFocusLinkedMonster,
   onRemoveToken,
-  onReplaceTokenImage,
   onUpdateToken,
 }: TokenModalProps) {
   const [selectedConditionId, setSelectedConditionId] = useState<string | null>(null)
   const isMonsterToken = token.kind === 'monster'
   const isPlayerToken = token.kind === 'player'
+  const isNpcToken = token.kind === 'npc'
+  const isMonsterLibraryToken = isMonsterToken || isNpcToken
   const monsterCardLabel = 'Открыть монстра'
   const selectedCondition = selectedConditionId ? conditionById.get(selectedConditionId) ?? null : null
 
@@ -1019,19 +1040,21 @@ export function TokenModal({
   }
 
   const updateLinkedMonster = (monsterId: string) => {
-    const selectedMonster = activeScene?.monsterBlocks.find((monster) => monster.id === monsterId) ?? null
+    const selectedMonster = monsters.find((monster) => monster.id === monsterId) ?? null
 
     onUpdateToken(token.id, (currentToken) => {
+      const nextKind = currentToken.kind === 'npc' ? 'npc' : 'monster'
+
       if (!selectedMonster) {
         return {
           ...currentToken,
-          kind: monsterId ? 'monster' : currentToken.kind,
+          kind: monsterId ? nextKind : currentToken.kind,
           linkedMonsterId: monsterId || null,
           linkedCharacterId: null,
         }
       }
 
-      return applyMonsterToToken(currentToken, selectedMonster)
+      return applyMonsterToToken(currentToken, selectedMonster, nextKind)
     })
   }
 
@@ -1082,7 +1105,7 @@ export function TokenModal({
         </div>
 
         <div className="editor-stack">
-          {isMonsterToken ? (
+          {isMonsterLibraryToken ? (
             <div className={styles.monsterTokenControls}>
               <label className="field">
                 <span>Тип</span>
@@ -1104,7 +1127,7 @@ export function TokenModal({
                     value={token.linkedMonsterId ?? ''}
                   >
                     <option value="">Не выбран</option>
-                    {activeScene.monsterBlocks.map((monster) => (
+                    {monsters.map((monster) => (
                       <option key={monster.id} value={monster.id}>
                         {monster.name}
                       </option>
@@ -1142,62 +1165,12 @@ export function TokenModal({
                 </StyledSelect>
               </label>
             </div>
-          ) : (
-            <div className={styles.hero}>
-              <div className={styles.imageUpload}>
-                <label className={styles.imagePicker}>
-                  <div className={styles.imagePreview}>
-                    <img alt={token.name} src={token.imageSrc} />
-                    <div className="token-image-overlay">
-                      <i aria-hidden="true" className="fa-solid fa-upload" />
-                    </div>
-                  </div>
-                  <input
-                    accept="image/*"
-                    className="token-image-input"
-                    onChange={(event) => {
-                      const file = event.target.files?.[0] ?? null
-                      void onReplaceTokenImage(token.id, file)
-                      event.target.value = ''
-                    }}
-                    type="file"
-                  />
-                </label>
-              </div>
+          ) : null}
 
-              <div className={styles.heroFields}>
-                <label className="field">
-                  <span>Тип</span>
-                  <StyledSelect
-                    onChange={(event) => updateTokenKind(event.target.value as TokenKind)}
-                    value={token.kind}
-                  >
-                    <option value="player">Игрок</option>
-                    <option value="monster">Монстр</option>
-                    <option value="npc">NPC</option>
-                  </StyledSelect>
-                </label>
-
-                <label className="field">
-                  <span>Группа</span>
-                  <input
-                    onChange={(event) =>
-                      onUpdateToken(token.id, (currentToken) => ({
-                        ...currentToken,
-                        groupLabel: event.target.value || null,
-                      }))
-                    }
-                    placeholder="Например, волки теней"
-                    value={token.groupLabel ?? ''}
-                  />
-                </label>
-
-              </div>
-            </div>
-          )}
-
-          {isMonsterToken ? (
+          {isMonsterLibraryToken ? (
             <>
+              <TokenStatsFields token={token} onUpdateToken={onUpdateToken} />
+
               {linkedMonster ? (
                 <MonsterPreviewCard
                   monster={linkedMonster}
@@ -1208,8 +1181,6 @@ export function TokenModal({
               ) : (
                 <p className="editor-empty">Выбери монстра сцены, чтобы показать его карточку.</p>
               )}
-
-              <TokenStatsFields token={token} onUpdateToken={onUpdateToken} />
             </>
           ) : isPlayerToken ? (
             <>
@@ -1231,46 +1202,10 @@ export function TokenModal({
                 </>
               ) : null}
             </>
-          ) : (
-            <>
-              <label className="field">
-                <span>Имя</span>
-                <input
-                  onChange={(event) =>
-                    onUpdateToken(token.id, (currentToken) => ({
-                      ...currentToken,
-                      name: event.target.value,
-                    }))
-                  }
-                  value={token.name}
-                />
-              </label>
-
-              <label className="field">
-                <span>Пространство</span>
-                <StyledSelect
-                  onChange={(event) =>
-                    onUpdateToken(token.id, (currentToken) => ({
-                      ...currentToken,
-                      space: event.target.value as TokenSpace,
-                    }))
-                  }
-                  value={token.space}
-                >
-                  {tokenSpaceValues.map((space) => (
-                    <option key={space} value={space}>
-                      {tokenSpaceLabels[space]}
-                    </option>
-                  ))}
-                </StyledSelect>
-              </label>
-
-              <TokenStatsFields token={token} onUpdateToken={onUpdateToken} />
-            </>
-          )}
+          ) : null}
 
           <div className="action-row zone-action-row">
-            {isMonsterToken ? (
+            {isMonsterLibraryToken ? (
               <button
                 aria-label={monsterCardLabel}
                 className="ghost-button compact-button token-modal-icon-button"
@@ -1282,6 +1217,7 @@ export function TokenModal({
                 <i aria-hidden="true" className="fa-solid fa-id-card" />
               </button>
             ) : null}
+            <TokenLayerControls token={token} onUpdateToken={onUpdateToken} />
             <button
               aria-label="Удалить фишку"
               className="ghost-button compact-button token-modal-icon-button"
@@ -1313,19 +1249,6 @@ function TokenLayerControls({
 }) {
   return (
     <>
-      <label className={`field ${styles.layerField}`}>
-        <span>Порядок слоя</span>
-        <input
-          onChange={(event) =>
-            onUpdateToken(token.id, (currentToken) => ({
-              ...currentToken,
-              zIndex: Number(event.target.value),
-            }))
-          }
-          type="number"
-          value={token.zIndex}
-        />
-      </label>
       <button
         aria-label="Ниже"
         className="ghost-button compact-button token-modal-icon-button"
@@ -1354,21 +1277,32 @@ function TokenLayerControls({
       >
         <i aria-hidden="true" className="fa-solid fa-arrow-up" />
       </button>
-      <button
-        aria-label={token.hiddenFromPlayers ? 'Фишка скрыта от игроков' : 'Фишка видима игрокам'}
-        className={`ghost-button compact-button token-modal-icon-button ${styles.visibilityToggle}`}
-        onClick={() =>
-          onUpdateToken(token.id, (currentToken) => ({
-            ...currentToken,
-            hiddenFromPlayers: !currentToken.hiddenFromPlayers,
-          }))
-        }
-        title={token.hiddenFromPlayers ? 'Фишка скрыта от игроков' : 'Фишка видима игрокам'}
-        type="button"
-      >
-        <i aria-hidden="true" className={`fa-solid ${token.hiddenFromPlayers ? 'fa-eye-slash' : 'fa-eye'}`} />
-      </button>
     </>
+  )
+}
+
+function TokenVisibilityToggle({
+  token,
+  onUpdateToken,
+}: {
+  token: TokenInstance
+  onUpdateToken: (tokenId: string, updater: (token: TokenInstance) => TokenInstance) => void
+}) {
+  return (
+    <button
+      aria-label={token.hiddenFromPlayers ? 'Фишка скрыта от игроков' : 'Фишка видима игрокам'}
+      className={`ghost-button compact-button token-modal-icon-button ${styles.visibilityToggle}`}
+      onClick={() =>
+        onUpdateToken(token.id, (currentToken) => ({
+          ...currentToken,
+          hiddenFromPlayers: !currentToken.hiddenFromPlayers,
+        }))
+      }
+      title={token.hiddenFromPlayers ? 'Фишка скрыта от игроков' : 'Фишка видима игрокам'}
+      type="button"
+    >
+      <i aria-hidden="true" className={`fa-solid ${token.hiddenFromPlayers ? 'fa-eye-slash' : 'fa-eye'}`} />
+    </button>
   )
 }
 
@@ -1401,19 +1335,24 @@ function TokenStatsFields({
           value={token.hitPointsCurrent ?? ''}
         />
       </label>
+      <label className="field">
+        <span>Временные ХП</span>
+        <input
+          min="0"
+          onChange={(event) =>
+            onUpdateToken(token.id, (currentToken) => ({
+              ...currentToken,
+              hitPointsTemp: event.target.value ? Number(event.target.value) : null,
+            }))
+          }
+          type="number"
+          value={token.hitPointsTemp ?? ''}
+        />
+      </label>
       {showMaxHitPoints ? (
-        <label className="field">
+        <label className={`field ${styles.maxHitPointsField}`}>
           <span>Макс. ХП</span>
-          <input
-            onChange={(event) =>
-              onUpdateToken(token.id, (currentToken) => ({
-                ...currentToken,
-                hitPointsMax: event.target.value ? Number(event.target.value) : null,
-              }))
-            }
-            type="number"
-            value={token.hitPointsMax ?? ''}
-          />
+          <input readOnly value={formatHitPointsMax(token)} />
         </label>
       ) : null}
       <label className="field">
@@ -1475,7 +1414,7 @@ function TokenStatsFields({
           })}
         </StyledSelect>
       </label>
-      <TokenLayerControls token={token} onUpdateToken={onUpdateToken} />
+      <TokenVisibilityToggle token={token} onUpdateToken={onUpdateToken} />
     </div>
   )
 }

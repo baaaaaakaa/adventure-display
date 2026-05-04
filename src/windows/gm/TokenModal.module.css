@@ -47,15 +47,6 @@
   opacity: 1;
 }
 
-.layerField {
-  width: auto;
-}
-
-.layerField input[type='number'] {
-  width: 92px;
-  min-width: 92px;
-}
-
 .visibilityToggle {
   justify-self: start;
   align-self: end;
@@ -63,6 +54,11 @@
 
 .conditionField {
   min-width: 170px;
+}
+
+.maxHitPointsField input {
+  width: 92px;
+  min-width: 92px;
 }
 
 .conditionShelf {

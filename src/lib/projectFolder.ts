@@ -333,6 +333,17 @@ async function persistProjectAssets(
         )) ?? character.avatarSrc
     }
 
+    for (const monster of adventure.monsterLibrary ?? []) {
+      monster.imageSrc =
+        (await persistAssetUrl(
+          context,
+          monster.imageSrc,
+          `${adventureFolderPath}/monsters/${sanitizePathSegment(monster.id)}`,
+          'image/webp',
+          `${monster.id}.webp`,
+        )) ?? monster.imageSrc
+    }
+
     for (const scene of adventure.scenes) {
       const sceneFolderPath = `${adventureFolderPath}/scenes/${sanitizePathSegment(scene.id)}`
 
@@ -536,6 +547,10 @@ async function resolveProjectAssets(
     for (const character of adventure.characters ?? []) {
       character.avatarSrc =
         (await resolveAssetPath(context, character.avatarSrc)) ?? character.avatarSrc
+    }
+
+    for (const monster of adventure.monsterLibrary ?? []) {
+      monster.imageSrc = (await resolveAssetPath(context, monster.imageSrc)) ?? monster.imageSrc
     }
 
     for (const scene of adventure.scenes) {

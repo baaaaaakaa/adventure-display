@@ -4,7 +4,16 @@
   "title": "Adventure",
   "type": "object",
   "additionalProperties": false,
-  "required": ["id", "title", "subtitle", "audioLibrary", "scenes"],
+  "required": [
+    "id",
+    "title",
+    "subtitle",
+    "assetLibrary",
+    "audioLibrary",
+    "characters",
+    "monsterLibrary",
+    "scenes"
+  ],
   "properties": {
     "id": {
       "type": "string",
@@ -28,8 +37,7 @@
       "type": "array",
       "items": {
         "$ref": "#/$defs/playerCharacter"
-      },
-      "default": []
+      }
     },
     "scenes": {
       "type": "array",
@@ -37,13 +45,32 @@
       "items": {
         "$ref": "#/$defs/scene"
       }
+    },
+    "assetLibrary": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/assetRecord"
+      }
+    },
+    "monsterLibrary": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/monsterBlock"
+      }
     }
   },
   "$defs": {
     "playerCharacter": {
       "type": "object",
       "additionalProperties": true,
-      "required": ["id", "name", "stats", "skills", "attacks", "text"],
+      "required": [
+        "id",
+        "name",
+        "stats",
+        "skills",
+        "attacks",
+        "text"
+      ],
       "properties": {
         "id": {
           "type": "string"
@@ -53,7 +80,10 @@
           "minLength": 1
         },
         "avatarSrc": {
-          "type": ["string", "null"]
+          "type": [
+            "string",
+            "null"
+          ]
         },
         "stats": {
           "type": "array"
@@ -72,7 +102,12 @@
     "audioTrack": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["id", "title", "kind", "src"],
+      "required": [
+        "id",
+        "title",
+        "kind",
+        "src"
+      ],
       "properties": {
         "id": {
           "type": "string",
@@ -84,17 +119,32 @@
         },
         "kind": {
           "type": "string",
-          "enum": ["music", "ambience", "sfx"]
+          "enum": [
+            "music",
+            "ambience",
+            "sfx"
+          ]
         },
         "src": {
           "type": "string"
+        },
+        "assetId": {
+          "type": [
+            "string",
+            "null"
+          ]
         }
       }
     },
     "handout": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["id", "title", "caption", "body"],
+      "required": [
+        "id",
+        "title",
+        "caption",
+        "body"
+      ],
       "properties": {
         "id": {
           "type": "string",
@@ -113,14 +163,27 @@
           "minLength": 1
         },
         "imageSrc": {
-          "type": ["string", "null"]
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "imageAssetId": {
+          "type": [
+            "string",
+            "null"
+          ]
         }
       }
     },
     "monsterFeature": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["id", "title", "body"],
+      "required": [
+        "id",
+        "title",
+        "body"
+      ],
       "properties": {
         "id": {
           "type": "string",
@@ -139,7 +202,12 @@
     "checkClue": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["id", "ability", "difficulty", "outcome"],
+      "required": [
+        "id",
+        "ability",
+        "difficulty",
+        "outcome"
+      ],
       "properties": {
         "id": {
           "type": "string",
@@ -185,7 +253,17 @@
         "bonusActions",
         "reactions",
         "legendaryActions",
-        "notes"
+        "notes",
+        "source",
+        "size",
+        "creatureType",
+        "alignment",
+        "proficiencyBonus",
+        "hitPointsFormula",
+        "damageVulnerabilities",
+        "damageResistances",
+        "damageImmunities",
+        "conditionImmunities"
       ],
       "properties": {
         "id": {
@@ -201,7 +279,10 @@
           "minLength": 1
         },
         "imageSrc": {
-          "type": ["string", "null"]
+          "type": [
+            "string",
+            "null"
+          ]
         },
         "armorClass": {
           "type": "string",
@@ -280,13 +361,59 @@
         },
         "notes": {
           "type": "string"
+        },
+        "source": {
+          "type": "string"
+        },
+        "size": {
+          "type": "string"
+        },
+        "creatureType": {
+          "type": "string"
+        },
+        "alignment": {
+          "type": "string"
+        },
+        "proficiencyBonus": {
+          "type": "string"
+        },
+        "imageAssetId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "hitPointsFormula": {
+          "type": "string"
+        },
+        "damageVulnerabilities": {
+          "type": "string"
+        },
+        "damageResistances": {
+          "type": "string"
+        },
+        "damageImmunities": {
+          "type": "string"
+        },
+        "conditionImmunities": {
+          "type": "string"
+        },
+        "infoSections": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/monsterFeature"
+          }
         }
       }
     },
     "map": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["id", "title", "placeholder"],
+      "required": [
+        "id",
+        "title",
+        "placeholder"
+      ],
       "properties": {
         "id": {
           "type": "string",
@@ -301,7 +428,16 @@
           "minLength": 1
         },
         "imageSrc": {
-          "type": ["string", "null"]
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "imageAssetId": {
+          "type": [
+            "string",
+            "null"
+          ]
         }
       }
     },
@@ -315,9 +451,12 @@
         "accent",
         "gmSummary",
         "gmNotes",
+        "splash",
         "map",
+        "zones",
         "handouts",
         "checksClues",
+        "monsterIds",
         "monsterBlocks",
         "recommendedAudio",
         "objectives"
@@ -337,7 +476,17 @@
         },
         "accent": {
           "type": "string",
-          "enum": ["ember", "gold", "teal"]
+          "enum": [
+            "amber",
+            "crimson",
+            "ember",
+            "gold",
+            "olive",
+            "rose",
+            "slate",
+            "teal",
+            "violet"
+          ]
         },
         "gmSummary": {
           "type": "string",
@@ -382,6 +531,157 @@
             "type": "string",
             "minLength": 1
           }
+        },
+        "splash": {
+          "$ref": "#/$defs/splash"
+        },
+        "zones": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/mapZone"
+          }
+        },
+        "monsterIds": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "assetRecord": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "title",
+        "kind",
+        "mimeType",
+        "originalName",
+        "dataUrl"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1
+        },
+        "kind": {
+          "type": "string",
+          "enum": [
+            "image",
+            "audio"
+          ]
+        },
+        "mimeType": {
+          "type": "string"
+        },
+        "originalName": {
+          "type": "string"
+        },
+        "dataUrl": {
+          "type": "string"
+        }
+      }
+    },
+    "splash": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "title",
+        "subtitle",
+        "body"
+      ],
+      "properties": {
+        "title": {
+          "type": "string"
+        },
+        "subtitle": {
+          "type": "string"
+        },
+        "body": {
+          "type": "string"
+        },
+        "imageAssetId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "imageSrc": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "mapZone": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "title",
+        "note",
+        "focusNote",
+        "x",
+        "y",
+        "width",
+        "height",
+        "visibleToPlayers",
+        "autoRevealOnEnter"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1
+        },
+        "note": {
+          "type": "string"
+        },
+        "focusNote": {
+          "type": "string"
+        },
+        "linkedHandoutId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "linkedCheckId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "linkedMonsterId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "x": {
+          "type": "number"
+        },
+        "y": {
+          "type": "number"
+        },
+        "width": {
+          "type": "number"
+        },
+        "height": {
+          "type": "number"
+        },
+        "visibleToPlayers": {
+          "type": "boolean"
+        },
+        "autoRevealOnEnter": {
+          "type": "boolean"
         }
       }
     }

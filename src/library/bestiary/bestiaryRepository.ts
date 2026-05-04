@@ -1,6 +1,8 @@
 import type { MonsterBlock } from '../../types/adventure'
 import { normalizeBestiary } from '../../lib/bestiaryImport'
+import { resolvePublicAssetSrc } from '../../lib/publicAssets'
 import builtInBestiaryUrl from '../../data/bestiary/builtinBestiary.json?url'
+import builtInBestiarySummariesUrl from '../../data/bestiary/builtinBestiarySummaries.json?url'
 
 export type MonsterSummary = Pick<
   MonsterBlock,
@@ -69,7 +71,7 @@ function toMonsterSummary(rawMonster: unknown): MonsterSummary | null {
     hitPoints: readString(rawMonster.hitPoints),
     speed: readString(rawMonster.speed),
     imageAssetId: null,
-    imageSrc: readString(rawMonster.imageSrc) || null,
+    imageSrc: resolvePublicAssetSrc(readString(rawMonster.imageSrc)) || null,
   }
 }
 
@@ -94,7 +96,8 @@ function loadRawBuiltInBestiary() {
 }
 
 export function loadBuiltInBestiarySummaries() {
-  builtInBestiarySummaryPromise ??= loadRawBuiltInBestiary().then((rawMonsters) => {
+  builtInBestiarySummaryPromise ??= readJsonAsset(builtInBestiarySummariesUrl).then((summaryData) => {
+    const rawMonsters = collectRawMonsters(summaryData)
     const seen = new Set<string>()
     const summaries: MonsterSummary[] = []
 
