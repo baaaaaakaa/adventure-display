@@ -688,6 +688,14 @@ export async function loadProjectFromDirectory(
   return resolveProjectAssets(directoryHandle, project)
 }
 
+export function isMissingProjectFolderFileError(error: unknown) {
+  return (
+    error instanceof DOMException &&
+    (error.name === 'NotFoundError' ||
+      /requested file or directory could not be found/i.test(error.message))
+  )
+}
+
 function openProjectDirectoryHandleDatabase() {
   return new Promise<IDBDatabase>((resolve, reject) => {
     const request = window.indexedDB.open(projectFolderHandleDatabaseName, 1)

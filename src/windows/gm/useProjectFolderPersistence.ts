@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import {
   ensureProjectDirectoryPermission,
+  isMissingProjectFolderFileError,
   loadProjectFromDirectory,
   pickProjectDirectory,
   rememberProjectDirectory,
@@ -260,7 +261,20 @@ export function useProjectFolderPersistence({
         return
       }
 
-      const loadedProject = await loadProjectFromDirectory(directoryHandle)
+      let loadedProject: ProjectState | null = null
+      let didInitializeEmptyFolder = false
+
+      try {
+        loadedProject = await loadProjectFromDirectory(directoryHandle)
+      } catch (error) {
+        if (!isMissingProjectFolderFileError(error)) {
+          throw error
+        }
+
+        await saveProjectToDirectory(directoryHandle, projectState)
+        didInitializeEmptyFolder = true
+      }
+
       await rememberProjectDirectory(directoryHandle).catch(() => undefined)
 
       setProjectDirectoryHandle(directoryHandle)
@@ -268,10 +282,19 @@ export function useProjectFolderPersistence({
       setProjectDirectoryAccessMode('readwrite')
       setProjectPersistenceStatus('saved')
       setProjectPersistenceError(null)
-      setLastProjectSaveAt(null)
-      onProjectLoaded(loadedProject, {
-        feedbackText: `Проект открыт из папки "${directoryHandle.name}".`,
-        historyLabel: 'Открыт проект из папки',
+      setLastProjectSaveAt(didInitializeEmptyFolder ? Date.now() : null)
+
+      if (loadedProject) {
+        onProjectLoaded(loadedProject, {
+          feedbackText: `Проект открыт из папки "${directoryHandle.name}".`,
+          historyLabel: 'Открыт проект из папки',
+        })
+        return
+      }
+
+      setImportFeedback({
+        tone: 'success',
+        text: `Папка "${directoryHandle.name}" подключена. Текущий проект сохранён в неё.`,
       })
     } catch (error) {
       if (error instanceof DOMException && error.name === 'AbortError') {

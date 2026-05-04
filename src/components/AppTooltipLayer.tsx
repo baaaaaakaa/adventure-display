@@ -266,7 +266,7 @@ function getTooltipContent(element: HTMLElement) {
 }
 
 function hasGeneratedOverflowTooltip(element: HTMLElement | null) {
-  return element?.getAttribute(generatedOverflowTooltipAttribute) !== null
+  return element !== null && element.getAttribute(generatedOverflowTooltipAttribute) !== null
 }
 
 function suppressGeneratedOverflowTooltip(element: HTMLElement | null) {
