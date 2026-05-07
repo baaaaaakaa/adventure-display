@@ -72,8 +72,8 @@ export function PlayerWindow() {
   const mapGrid = sceneRuntime?.mapGrid ?? defaultMapGrid
   const mapGridAspectRatio = mapGrid.columns / mapGrid.rows
   const mapFrameStyle = {
-    width: `min(100%, ${mapGridAspectRatio * 100}dvh)`,
-    height: `min(100%, ${(mapGrid.rows / mapGrid.columns) * 100}dvw)`,
+    width: `max(100%, ${mapGridAspectRatio * 100}dvh)`,
+    height: `max(100%, ${(mapGrid.rows / mapGrid.columns) * 100}dvw)`,
     aspectRatio: `${mapGrid.columns} / ${mapGrid.rows}`,
   }
   const isMapGridVisible = sceneRuntime?.mapGridVisible ?? true

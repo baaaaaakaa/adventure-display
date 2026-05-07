@@ -2199,8 +2199,8 @@ export function GmWindow() {
   const activeMapGrid = normalizeMapGrid(activeSceneState?.mapGrid)
   const activeMapGridAspectRatio = activeMapGrid.columns / activeMapGrid.rows
   const activeMapFrameStyle = {
-    width: `min(100%, ${activeMapGridAspectRatio * 100}dvh)`,
-    height: `min(100%, ${(activeMapGrid.rows / activeMapGrid.columns) * 100}dvw)`,
+    width: `max(100%, ${activeMapGridAspectRatio * 100}dvh)`,
+    height: `max(100%, ${(activeMapGrid.rows / activeMapGrid.columns) * 100}dvw)`,
     aspectRatio: `${activeMapGrid.columns} / ${activeMapGrid.rows}`,
   }
   const isMapGridVisible = activeSceneState?.mapGridVisible ?? true
