@@ -554,14 +554,42 @@ async function readBlobAsDataUrl(blob: Blob) {
 function isBlobUrl(value: string) {
   return value.startsWith('blob:')
 }
+function isProjectAssetPathReference(value: string) {
+  return /^assets\//.test(value) || /^adventures\//.test(value) || /^monsters\//.test(value)
+}
 function isPlayerDisplayAssetField(fieldName: string | null) {
   return fieldName === 'imageSrc' || fieldName === 'avatarSrc' || fieldName === 'dataUrl'
+}
+async function readProjectAssetBlob(
+  root: FileSystemDirectoryHandle,
+  assetPath: string,
+) {
+  const segments = assetPath.split('/').filter(Boolean)
+  const fileName = segments.pop()
+
+  if (!fileName) {
+    return null
+  }
+
+  try {
+    let directory = root
+
+    for (const segment of segments) {
+      directory = await directory.getDirectoryHandle(segment)
+    }
+
+    const fileHandle = await directory.getFileHandle(fileName)
+    return fileHandle.getFile()
+  } catch {
+    return null
+  }
 }
 async function resolvePlayerDisplayAssetUrl(
   value: string,
   cache: Map<string, string>,
+  projectDirectoryHandle: FileSystemDirectoryHandle | null,
 ) {
-  if (!isBlobUrl(value)) {
+  if (!isBlobUrl(value) && !isProjectAssetPathReference(value)) {
     return value
   }
 
@@ -572,13 +600,19 @@ async function resolvePlayerDisplayAssetUrl(
   }
 
   try {
-    const response = await fetch(value)
-
-    if (!response.ok) {
+    if (isProjectAssetPathReference(value) && !projectDirectoryHandle) {
       return value
     }
 
-    const dataUrl = await readBlobAsDataUrl(await response.blob())
+    const blob = isProjectAssetPathReference(value)
+      ? await readProjectAssetBlob(projectDirectoryHandle, value)
+      : await fetch(value).then((response) => (response.ok ? response.blob() : null))
+
+    if (!blob) {
+      return value
+    }
+
+    const dataUrl = await readBlobAsDataUrl(blob)
     cache.set(value, dataUrl)
     return dataUrl
   } catch {
@@ -588,17 +622,22 @@ async function resolvePlayerDisplayAssetUrl(
 async function hydratePlayerDisplayAssetUrls(
   value: unknown,
   cache: Map<string, string>,
+  projectDirectoryHandle: FileSystemDirectoryHandle | null,
   fieldName: string | null = null,
 ): Promise<unknown> {
   if (typeof value === 'string') {
     return isPlayerDisplayAssetField(fieldName)
-      ? resolvePlayerDisplayAssetUrl(value, cache)
+      ? resolvePlayerDisplayAssetUrl(value, cache, projectDirectoryHandle)
       : value
   }
 
   if (Array.isArray(value)) {
     for (let index = 0; index < value.length; index += 1) {
-      value[index] = await hydratePlayerDisplayAssetUrls(value[index], cache)
+      value[index] = await hydratePlayerDisplayAssetUrls(
+        value[index],
+        cache,
+        projectDirectoryHandle,
+      )
     }
     return value
   }
@@ -607,7 +646,12 @@ async function hydratePlayerDisplayAssetUrls(
     const record = value as Record<string, unknown>
 
     for (const [key, entry] of Object.entries(record)) {
-      record[key] = await hydratePlayerDisplayAssetUrls(entry, cache, key)
+      record[key] = await hydratePlayerDisplayAssetUrls(
+        entry,
+        cache,
+        projectDirectoryHandle,
+        key,
+      )
     }
   }
 
@@ -616,9 +660,10 @@ async function hydratePlayerDisplayAssetUrls(
 async function createPlayerDisplayProjectState(
   projectState: ProjectState,
   cache: Map<string, string>,
+  projectDirectoryHandle: FileSystemDirectoryHandle | null,
 ) {
   const projectStateForPlayer = JSON.parse(JSON.stringify(projectState)) as ProjectState
-  await hydratePlayerDisplayAssetUrls(projectStateForPlayer, cache)
+  await hydratePlayerDisplayAssetUrls(projectStateForPlayer, cache, projectDirectoryHandle)
   return projectStateForPlayer
 }
 async function createAssetRecordFromFile(
@@ -2139,6 +2184,7 @@ export function GmWindow() {
     const projectStateForPlayer = await createPlayerDisplayProjectState(
       nextProjectState,
       playerDisplayAssetCacheRef.current,
+      projectDirectoryHandle,
     )
 
     if (playerDisplayBroadcastIdRef.current === broadcastId) {
@@ -2148,7 +2194,7 @@ export function GmWindow() {
   useEffect(() => {
     projectStateRef.current = projectState
     void broadcastProjectStateToPlayer(projectState)
-  }, [channelRef, projectState])
+  }, [channelRef, projectDirectoryHandle, projectState])
   useEffect(() => {
     const channel = channelRef.current
 
