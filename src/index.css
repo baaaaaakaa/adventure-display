@@ -1548,11 +1548,10 @@ textarea:focus {
   min-height: 100dvh;
   gap: 0;
   overflow: hidden;
+  place-items: center;
 }
 
 .gm-shell-editor > .control-panel > .map-board {
-  width: 100dvw;
-  height: 100dvh;
   border: 0;
   border-radius: 0;
   box-shadow: none;
@@ -4027,9 +4026,10 @@ textarea:focus {
 .player-map-stage .player-map-shell {
   width: 100dvw;
   height: 100dvh;
-  display: block;
+  display: grid;
   padding: 0;
   overflow: hidden;
+  place-items: center;
 }
 
 .player-map-stage .player-map-header,
@@ -4050,10 +4050,6 @@ textarea:focus {
 }
 
 .player-map-stage .player-map-board {
-  width: 100dvw;
-  max-width: none !important;
-  height: 100dvh;
-  aspect-ratio: auto !important;
   border: 0;
   border-radius: 0;
   box-shadow: none;

@@ -69,6 +69,12 @@ export function PlayerWindow() {
       (layer) => layer.visibleToPlayers && layer.imageSrc,
     ) ?? []
   const mapGrid = sceneRuntime?.mapGrid ?? defaultMapGrid
+  const mapGridAspectRatio = mapGrid.columns / mapGrid.rows
+  const mapBoardStyle = {
+    width: `min(100dvw, ${mapGridAspectRatio * 100}dvh)`,
+    height: `min(100dvh, ${(mapGrid.rows / mapGrid.columns) * 100}dvw)`,
+    aspectRatio: `${mapGrid.columns} / ${mapGrid.rows}`,
+  }
   const isMapGridVisible = sceneRuntime?.mapGridVisible ?? true
   const mapViewport = sceneRuntime?.mapViewport ?? {
     scale: 1,
@@ -200,10 +206,7 @@ export function PlayerWindow() {
 
         <div
           className={`player-map-board ${playerVisibleLayers.length > 0 ? 'with-image' : ''}`}
-          style={{
-            aspectRatio: `${mapGrid.columns} / ${mapGrid.rows}`,
-            maxWidth: `min(100%, calc((100vh - 170px) * ${mapGrid.columns / mapGrid.rows}))`,
-          }}
+          style={mapBoardStyle}
         >
           <div className="player-map-vignette" />
           <div

@@ -1799,10 +1799,7 @@ export function GmWindow() {
   const [isMapLayersModalOpen, setIsMapLayersModalOpen] = useState(false)
   const [isTokenModalOpen, setIsTokenModalOpen] = useState(false)
   const [isZoneModalOpen, setIsZoneModalOpen] = useState(false)
-  const [mapGridCellSize, setMapGridCellSize] = useState<{
-    width: number
-    height: number
-  } | null>(null)
+  const [mapGridCellSize, setMapGridCellSize] = useState<number | null>(null)
   const [openCompactZoneToolsZoneId, setOpenCompactZoneToolsZoneId] = useState<string | null>(null)
   const [hoveredZoneResizeHandle, setHoveredZoneResizeHandle] = useState<{
     zoneId: string
@@ -2209,6 +2206,12 @@ export function GmWindow() {
     updateSceneRuntimeState,
   })
   const activeMapGrid = normalizeMapGrid(activeSceneState?.mapGrid)
+  const activeMapGridAspectRatio = activeMapGrid.columns / activeMapGrid.rows
+  const activeMapBoardStyle = {
+    width: `min(100dvw, ${activeMapGridAspectRatio * 100}dvh)`,
+    height: `min(100dvh, ${(activeMapGrid.rows / activeMapGrid.columns) * 100}dvw)`,
+    aspectRatio: `${activeMapGrid.columns} / ${activeMapGrid.rows}`,
+  }
   const isMapGridVisible = activeSceneState?.mapGridVisible ?? true
   const hiddenFogZones =
     activeScene && activeSceneState
@@ -2223,21 +2226,15 @@ export function GmWindow() {
     }
     const updateGridCellSize = () => {
       const rect = board.getBoundingClientRect()
-      const nextCellSize = {
-        width: Math.max(1, rect.width / activeMapGrid.columns),
-        height: Math.max(1, rect.height / activeMapGrid.rows),
-      }
-      setMapGridCellSize((currentCellSize) => {
-        if (
-          currentCellSize != null &&
-          Math.abs(currentCellSize.width - nextCellSize.width) < 0.5 &&
-          Math.abs(currentCellSize.height - nextCellSize.height) < 0.5
-        ) {
-          return currentCellSize
-        }
-
-        return nextCellSize
-      })
+      const nextCellSize = Math.max(
+        1,
+        Math.min(rect.width / activeMapGrid.columns, rect.height / activeMapGrid.rows),
+      )
+      setMapGridCellSize((currentCellSize) =>
+        currentCellSize != null && Math.abs(currentCellSize - nextCellSize) < 0.5
+          ? currentCellSize
+          : nextCellSize,
+      )
     }
     updateGridCellSize()
     if (typeof ResizeObserver === 'undefined') {
@@ -5902,6 +5899,7 @@ export function GmWindow() {
           ref={mapBoardRef}
           className={`map-board accent-${activeScene.accent} ${gmVisibleLayers.length > 0 ? 'with-image' : ''} interaction-${mapInteractionMode} ${isMapPanning ? 'is-panning' : ''} ${isServiceMarkerDragging ? 'is-service-marker-dragging' : ''} ${rotatingTokenId ? 'is-token-rotating' : ''}`}
           onPointerDown={handleMapBoardPointerDown}
+          style={activeMapBoardStyle}
         >
           <div
             className="map-menu-panel"
@@ -5944,7 +5942,7 @@ export function GmWindow() {
                 className="map-grid-overlay"
                 style={{
                   backgroundSize: mapGridCellSize
-                    ? `${mapGridCellSize.width}px ${mapGridCellSize.height}px`
+                    ? `${mapGridCellSize}px ${mapGridCellSize}px`
                     : `${100 / activeMapGrid.columns}% ${100 / activeMapGrid.rows}%`,
                 }}
               />
@@ -6190,10 +6188,10 @@ export function GmWindow() {
                   left: `${token.x}%`,
                   top: `${token.y}%`,
                   width: mapGridCellSize
-                    ? `${tokenSpaceFootprints[token.space] * mapGridCellSize.width}px`
+                    ? `${tokenSpaceFootprints[token.space] * mapGridCellSize}px`
                     : `${(tokenSpaceFootprints[token.space] / activeMapGrid.columns) * 100}%`,
                   height: mapGridCellSize
-                    ? `${tokenSpaceFootprints[token.space] * mapGridCellSize.height}px`
+                    ? `${tokenSpaceFootprints[token.space] * mapGridCellSize}px`
                     : `${(tokenSpaceFootprints[token.space] / activeMapGrid.rows) * 100}%`,
                   backgroundImage: `url(${token.imageSrc})`,
                   transform: `translate(-50%, -50%) rotate(${getTokenRotation(token)}deg)`,
