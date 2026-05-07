@@ -1,4 +1,5 @@
 import type { RefObject } from 'react'
+import { createCssUrl } from '../../lib/css'
 import type { MapLayerInstance } from '../../types/adventure'
 import styles from './MapLayersModal.module.css'
 
@@ -127,7 +128,12 @@ export function MapLayersModal({
                   <label className={styles.imagePicker}>
                     <div className={styles.imagePreview}>
                       {activeLayer.imageSrc ? (
-                        <img alt={activeLayer.title} src={activeLayer.imageSrc} />
+                        <div
+                          aria-label={activeLayer.title}
+                          className={styles.imagePreviewImage}
+                          role="img"
+                          style={{ backgroundImage: createCssUrl(activeLayer.imageSrc) }}
+                        />
                       ) : (
                         <div className={styles.imagePlaceholder}>
                           <i aria-hidden="true" className="fa-regular fa-image" />

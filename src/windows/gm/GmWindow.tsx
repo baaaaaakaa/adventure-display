@@ -38,6 +38,7 @@ import {
 } from '../../lib/playerDisplay'
 import { collectProjectObjectUrls, revokeObjectUrls } from '../../lib/objectUrls'
 import { createProjectExportPackage } from '../../lib/projectExport'
+import { createCssUrl } from '../../lib/css'
 import { createPlayerCharacterFromLssJson } from '../../lib/lssCharacterImport'
 import {
   loadBuiltInBestiarySummaries,
@@ -5928,7 +5929,7 @@ export function GmWindow() {
                   key={layer.id}
                   className="map-layer"
                   style={{
-                    backgroundImage: layer.imageSrc ? `url(${layer.imageSrc})` : undefined,
+                    backgroundImage: createCssUrl(layer.imageSrc),
                     transform: `scale(${layer.scale}) rotate(${layer.rotation}deg)`,
                   }}
                 />

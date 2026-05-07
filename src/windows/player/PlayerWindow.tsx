@@ -5,6 +5,7 @@ import {
   getActiveAdventureBundle,
   playerDisplayChannelName,
 } from '../../lib/playerDisplay'
+import { createCssUrl } from '../../lib/css'
 import { resolvePublicAssetSrc } from '../../lib/publicAssets'
 import { getFogCellRects, getZoneFogRect } from '../../lib/fog'
 import { defaultMapGrid, tokenSpaceFootprints } from '../../types/adventure'
@@ -64,28 +65,10 @@ export function PlayerWindow() {
       (entry) => entry.id === session.playerDisplay.activeHandoutId,
     ) ?? null
   const splash = scene.splash
-  const explicitPlayerVisibleLayers =
+  const playerVisibleLayers =
     sceneRuntime?.mapLayers.filter(
       (layer) => layer.visibleToPlayers && layer.imageSrc,
     ) ?? []
-  const fallbackPlayerMapImage = sceneRuntime?.mapImageSrc ?? scene.map.imageSrc ?? null
-  const fallbackPlayerMapLayer =
-    explicitPlayerVisibleLayers.length === 0 && fallbackPlayerMapImage
-      ? [{
-        id: `${scene.id}-player-fallback-layer`,
-        title: scene.map.title,
-        imageSrc: fallbackPlayerMapImage,
-        visibleToGm: true,
-        visibleToPlayers: true,
-        isActive: true,
-        scale: 1,
-        rotation: 0,
-      }]
-      : []
-  const playerVisibleLayers =
-    explicitPlayerVisibleLayers.length > 0
-      ? explicitPlayerVisibleLayers
-      : fallbackPlayerMapLayer
   const mapGrid = sceneRuntime?.mapGrid ?? defaultMapGrid
   const mapGridAspectRatio = mapGrid.columns / mapGrid.rows
   const mapFrameStyle = {
@@ -239,7 +222,7 @@ export function PlayerWindow() {
                   key={layer.id}
                   className="map-layer"
                   style={{
-                    backgroundImage: layer.imageSrc ? `url(${layer.imageSrc})` : undefined,
+                    backgroundImage: createCssUrl(layer.imageSrc),
                     transform: `scale(${layer.scale}) rotate(${layer.rotation}deg)`,
                   }}
                 />
