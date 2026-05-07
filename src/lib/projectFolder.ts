@@ -497,6 +497,25 @@ type ResolveContext = {
   objectUrlsByPath: Map<string, string>
 }
 
+const projectAssetPathsByObjectUrl = new Map<
+  string,
+  { root: FileSystemDirectoryHandle; path: string }
+>()
+
+export async function readProjectAssetBlobForObjectUrl(objectUrl: string) {
+  const entry = projectAssetPathsByObjectUrl.get(objectUrl)
+
+  if (!entry) {
+    return null
+  }
+
+  try {
+    return readBlobFromPath(entry.root, entry.path)
+  } catch {
+    return null
+  }
+}
+
 async function resolveAssetPath(
   context: ResolveContext,
   value: string | null | undefined,
@@ -518,6 +537,10 @@ async function resolveAssetPath(
   const blob = await readBlobFromPath(context.root, value)
   const objectUrl = URL.createObjectURL(blob)
   context.objectUrlsByPath.set(value, objectUrl)
+  projectAssetPathsByObjectUrl.set(objectUrl, {
+    root: context.root,
+    path: value,
+  })
 
   return objectUrl
 }

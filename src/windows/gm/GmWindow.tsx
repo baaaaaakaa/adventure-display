@@ -40,6 +40,7 @@ import { collectProjectObjectUrls, revokeObjectUrls } from '../../lib/objectUrls
 import { createProjectExportPackage } from '../../lib/projectExport'
 import { createCssUrl } from '../../lib/css'
 import { createPlayerCharacterFromLssJson } from '../../lib/lssCharacterImport'
+import { readProjectAssetBlobForObjectUrl } from '../../lib/projectFolder'
 import {
   loadBuiltInBestiarySummaries,
   loadBuiltInMonsterDetail,
@@ -606,7 +607,8 @@ async function resolvePlayerDisplayAssetUrl(
 
     const blob = isProjectAssetPathReference(value)
       ? await readProjectAssetBlob(projectDirectoryHandle, value)
-      : await fetch(value).then((response) => (response.ok ? response.blob() : null))
+      : await readProjectAssetBlobForObjectUrl(value) ??
+        await fetch(value).then((response) => (response.ok ? response.blob() : null))
 
     if (!blob) {
       return value
