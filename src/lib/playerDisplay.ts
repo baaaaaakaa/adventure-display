@@ -331,11 +331,11 @@ function createDefaultMapViewport(): MapViewport {
 function normalizeMapGrid(value?: Partial<MapGridSettings> | null): MapGridSettings {
   const columns =
     typeof value?.columns === 'number'
-      ? Math.max(4, Math.min(64, Math.round(value.columns)))
+      ? Math.max(1, Math.round(value.columns))
       : defaultMapGrid.columns
   const rows =
     typeof value?.rows === 'number'
-      ? Math.max(4, Math.min(64, Math.round(value.rows)))
+      ? Math.max(1, Math.round(value.rows))
       : defaultMapGrid.rows
 
   return { columns, rows }

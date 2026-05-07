@@ -180,7 +180,7 @@ function getZoneResizeCursor(handle: ZoneResizeHandle | null) {
   }
 }
 function normalizeMapGridValue(value: number, fallback: number) {
-  return Math.max(4, Math.min(64, Math.round(Number.isFinite(value) ? value : fallback)))
+  return Math.max(1, Math.round(Number.isFinite(value) ? value : fallback))
 }
 function normalizeMapGrid(mapGrid?: Partial<MapGridSettings> | null): MapGridSettings {
   return {

@@ -26,9 +26,10 @@ export function MapGridModal({
   }, [mapGrid.columns, mapGrid.rows])
 
   const commitDraftValue = (axis: keyof MapGridSettings) => {
-    const nextValue = Number(draftGrid[axis])
+    const rawValue = draftGrid[axis].trim()
+    const nextValue = Number(rawValue)
 
-    if (Number.isFinite(nextValue)) {
+    if (rawValue && Number.isFinite(nextValue)) {
       onUpdateMapGrid(axis, nextValue)
       return
     }
@@ -96,8 +97,7 @@ export function MapGridModal({
               <label className="compact-inline-field">
                 <span>Колонки</span>
                 <input
-                  min={4}
-                  max={64}
+                  min={1}
                   step={1}
                   type="number"
                   value={draftGrid.columns}
@@ -114,8 +114,7 @@ export function MapGridModal({
               <label className="compact-inline-field">
                 <span>Ряды</span>
                 <input
-                  min={4}
-                  max={64}
+                  min={1}
                   step={1}
                   type="number"
                   value={draftGrid.rows}
