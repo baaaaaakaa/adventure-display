@@ -1548,10 +1548,11 @@ textarea:focus {
   min-height: 100dvh;
   gap: 0;
   overflow: hidden;
-  place-items: center;
 }
 
 .gm-shell-editor > .control-panel > .map-board {
+  width: 100dvw;
+  height: 100dvh;
   border: 0;
   border-radius: 0;
   box-shadow: none;
@@ -1943,6 +1944,13 @@ textarea:focus {
 .map-grid-overlay {
   position: absolute;
   inset: 0;
+}
+
+.map-frame {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
 }
 
 .map-transform-layer {
@@ -4026,10 +4034,9 @@ textarea:focus {
 .player-map-stage .player-map-shell {
   width: 100dvw;
   height: 100dvh;
-  display: grid;
+  display: block;
   padding: 0;
   overflow: hidden;
-  place-items: center;
 }
 
 .player-map-stage .player-map-header,
@@ -4050,6 +4057,10 @@ textarea:focus {
 }
 
 .player-map-stage .player-map-board {
+  width: 100dvw;
+  max-width: none !important;
+  height: 100dvh;
+  aspect-ratio: auto !important;
   border: 0;
   border-radius: 0;
   box-shadow: none;

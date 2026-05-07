@@ -70,9 +70,9 @@ export function PlayerWindow() {
     ) ?? []
   const mapGrid = sceneRuntime?.mapGrid ?? defaultMapGrid
   const mapGridAspectRatio = mapGrid.columns / mapGrid.rows
-  const mapBoardStyle = {
-    width: `min(100dvw, ${mapGridAspectRatio * 100}dvh)`,
-    height: `min(100dvh, ${(mapGrid.rows / mapGrid.columns) * 100}dvw)`,
+  const mapFrameStyle = {
+    width: `min(100%, ${mapGridAspectRatio * 100}dvh)`,
+    height: `min(100%, ${(mapGrid.rows / mapGrid.columns) * 100}dvw)`,
     aspectRatio: `${mapGrid.columns} / ${mapGrid.rows}`,
   }
   const isMapGridVisible = sceneRuntime?.mapGridVisible ?? true
@@ -206,9 +206,9 @@ export function PlayerWindow() {
 
         <div
           className={`player-map-board ${playerVisibleLayers.length > 0 ? 'with-image' : ''}`}
-          style={mapBoardStyle}
         >
           <div className="player-map-vignette" />
+          <div className="map-frame" style={mapFrameStyle}>
           <div
             className="map-transform-layer"
             style={{
@@ -372,6 +372,7 @@ export function PlayerWindow() {
               <p>{scene.map.placeholder}</p>
             </div>
           ) : null}
+          </div>
 
           {handout ? (
             <div className="handout-modal-backdrop player-handout-modal" role="presentation">

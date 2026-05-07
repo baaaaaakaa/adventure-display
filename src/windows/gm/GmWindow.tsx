@@ -126,17 +126,6 @@ type FogSelectionRect = {
   width: number
   height: number
 }
-function getElementRelativePercentPosition(element: HTMLDivElement, clientX: number, clientY: number) {
-  const rect = element.getBoundingClientRect()
-  const normalizedX = Math.min(0.9999, Math.max(0, (clientX - rect.left) / rect.width))
-  const normalizedY = Math.min(0.9999, Math.max(0, (clientY - rect.top) / rect.height))
-  return {
-    normalizedX,
-    normalizedY,
-    percentX: normalizedX * 100,
-    percentY: normalizedY * 100,
-  }
-}
 type ZoneSelectionRect = FogSelectionRect
 type ZoneResizeHandle = 'n' | 'e' | 's' | 'w' | 'ne' | 'nw' | 'se' | 'sw'
 function getZoneResizeHandle(zoneElement: HTMLDivElement, clientX: number, clientY: number): ZoneResizeHandle | null {
@@ -1866,6 +1855,7 @@ export function GmWindow() {
     setImportFeedback,
   })
   const mapBoardRef = useRef<HTMLDivElement | null>(null)
+  const mapFrameRef = useRef<HTMLDivElement | null>(null)
   const mapTransformLayerRef = useRef<HTMLDivElement | null>(null)
   const projectActionsRef = useRef<HTMLDivElement | null>(null)
   const projectObjectUrlsRef = useRef<Set<string>>(new Set())
@@ -2207,9 +2197,9 @@ export function GmWindow() {
   })
   const activeMapGrid = normalizeMapGrid(activeSceneState?.mapGrid)
   const activeMapGridAspectRatio = activeMapGrid.columns / activeMapGrid.rows
-  const activeMapBoardStyle = {
-    width: `min(100dvw, ${activeMapGridAspectRatio * 100}dvh)`,
-    height: `min(100dvh, ${(activeMapGrid.rows / activeMapGrid.columns) * 100}dvw)`,
+  const activeMapFrameStyle = {
+    width: `min(100%, ${activeMapGridAspectRatio * 100}dvh)`,
+    height: `min(100%, ${(activeMapGrid.rows / activeMapGrid.columns) * 100}dvw)`,
     aspectRatio: `${activeMapGrid.columns} / ${activeMapGrid.rows}`,
   }
   const isMapGridVisible = activeSceneState?.mapGridVisible ?? true
@@ -2220,7 +2210,7 @@ export function GmWindow() {
   const effectiveFogCells =
     activeSceneState ? activeSceneState.fogCells : []
   useEffect(() => {
-    const board = mapBoardRef.current
+    const board = mapFrameRef.current
     if (!board) {
       return
     }
@@ -2552,11 +2542,11 @@ export function GmWindow() {
     }
   }
   function addZoneAt(clientX: number, clientY: number) {
-    if (!activeScene || !mapBoardRef.current) {
+    if (!activeScene || !mapFrameRef.current) {
       return
     }
     const { x, y } = resolveMapBoardPosition(
-      mapBoardRef.current,
+      mapFrameRef.current,
       clientX,
       clientY,
       activeMapViewport,
@@ -2650,7 +2640,7 @@ export function GmWindow() {
     clientY: number,
     dragOffset: { x: number; y: number } | null = null,
   ) {
-    const mapBoard = mapBoardRef.current
+    const mapBoard = mapFrameRef.current
     if (!mapBoard || !activeScene) {
       return
     }
@@ -2679,7 +2669,7 @@ export function GmWindow() {
       x: event.clientX,
       y: event.clientY,
     }
-    const mapBoard = mapBoardRef.current
+    const mapBoard = mapFrameRef.current
     const zone = activeScene?.zones.find((entry) => entry.id === zoneId) ?? null
     if (mapBoard && zone) {
       const pointerPosition = resolveMapBoardPosition(
@@ -2726,7 +2716,7 @@ export function GmWindow() {
     if (mapInteractionMode !== 'navigate' && mapInteractionMode !== 'zone') {
       return
     }
-    const mapBoard = mapBoardRef.current
+    const mapBoard = mapFrameRef.current
     const zone = activeScene?.zones.find((entry) => entry.id === zoneId) ?? null
     if (!mapBoard || !zone) {
       return
@@ -3275,11 +3265,11 @@ export function GmWindow() {
     })
   }
   function addTokenAt(clientX: number, clientY: number) {
-    if (!activeScene || !mapBoardRef.current) {
+    if (!activeScene || !mapFrameRef.current) {
       return
     }
     const { x, y } = resolveMapBoardPosition(
-      mapBoardRef.current,
+      mapFrameRef.current,
       clientX,
       clientY,
       activeMapViewport,
@@ -3298,11 +3288,11 @@ export function GmWindow() {
     setIsTokenModalOpen(true)
   }
   function addServiceMarkerAt(clientX: number, clientY: number) {
-    if (!activeScene || !mapBoardRef.current) {
+    if (!activeScene || !mapFrameRef.current) {
       return
     }
     const { x, y } = resolveMapBoardPosition(
-      mapBoardRef.current,
+      mapFrameRef.current,
       clientX,
       clientY,
       activeMapViewport,
@@ -3352,7 +3342,7 @@ export function GmWindow() {
     }))
   }
   function moveServiceMarker(markerId: string, clientX: number, clientY: number) {
-    const mapBoard = mapBoardRef.current
+    const mapBoard = mapFrameRef.current
     if (!mapBoard || !activeScene) {
       return
     }
@@ -3409,11 +3399,11 @@ export function GmWindow() {
     window.addEventListener('pointerup', handleUp)
   }
   function applyFogCellByPointer(clientX: number, clientY: number, mode: 'fog-draw' | 'fog-erase') {
-    if (!activeScene || !mapBoardRef.current) {
+    if (!activeScene || !mapFrameRef.current) {
       return
     }
     const cellId = getFogCellId(
-      mapBoardRef.current,
+      mapFrameRef.current,
       clientX,
       clientY,
       activeMapViewport,
@@ -3510,11 +3500,11 @@ export function GmWindow() {
     event: ReactPointerEvent<HTMLDivElement>,
     mode: 'fog-area-draw' | 'fog-area-erase',
   ) {
-    if (!activeScene || !mapBoardRef.current) {
+    if (!activeScene || !mapFrameRef.current) {
       return
     }
     event.preventDefault()
-    const board = mapBoardRef.current
+    const board = mapFrameRef.current
     const startPosition = getNormalizedMapBoardPosition(
       board,
       event.clientX,
@@ -3567,7 +3557,7 @@ export function GmWindow() {
     window.addEventListener('pointerup', handleUp)
   }
   function moveToken(tokenId: string, clientX: number, clientY: number) {
-    const mapBoard = mapBoardRef.current
+    const mapBoard = mapFrameRef.current
     if (!mapBoard || !activeScene) {
       return
     }
@@ -3625,7 +3615,7 @@ export function GmWindow() {
     )
   }
   function getTokenPointerAngle(tokenId: string, clientX: number, clientY: number) {
-    const mapBoard = mapBoardRef.current
+    const mapBoard = mapFrameRef.current
     const token = activeSceneStateRef.current?.tokens.find((entry) => entry.id === tokenId)
     if (!mapBoard || !token) {
       return null
@@ -3753,23 +3743,26 @@ export function GmWindow() {
     window.addEventListener('pointerup', handleUp)
   }
   function beginZoneSelection(event: ReactPointerEvent<HTMLDivElement>) {
-    if (!activeScene || !mapTransformLayerRef.current) {
+    if (!activeScene || !mapFrameRef.current) {
       return
     }
     event.preventDefault()
     event.stopPropagation()
+    const frame = mapFrameRef.current
     const startClientX = event.clientX
     const startClientY = event.clientY
-    const startPosition = getElementRelativePercentPosition(
-      mapTransformLayerRef.current,
+    const startPosition = getNormalizedMapBoardPosition(
+      frame,
       startClientX,
       startClientY,
+      activeMapViewport,
     )
     const updateRect = (clientX: number, clientY: number) => {
-      const nextPosition = getElementRelativePercentPosition(
-        mapTransformLayerRef.current,
+      const nextPosition = getNormalizedMapBoardPosition(
+        frame,
         clientX,
         clientY,
+        activeMapViewport,
       )
       const left = Math.min(startPosition.percentX, nextPosition.percentX)
       const top = Math.min(startPosition.percentY, nextPosition.percentY)
@@ -5899,7 +5892,6 @@ export function GmWindow() {
           ref={mapBoardRef}
           className={`map-board accent-${activeScene.accent} ${gmVisibleLayers.length > 0 ? 'with-image' : ''} interaction-${mapInteractionMode} ${isMapPanning ? 'is-panning' : ''} ${isServiceMarkerDragging ? 'is-service-marker-dragging' : ''} ${rotatingTokenId ? 'is-token-rotating' : ''}`}
           onPointerDown={handleMapBoardPointerDown}
-          style={activeMapBoardStyle}
         >
           <div
             className="map-menu-panel"
@@ -5919,12 +5911,17 @@ export function GmWindow() {
             </button>
           </div>
           <div
-            ref={mapTransformLayerRef}
-            className="map-transform-layer"
-            style={{
-              transform: `translate(${activeMapViewport.offsetX}px, ${activeMapViewport.offsetY}px) scale(${activeMapViewport.scale})`,
-            }}
+            ref={mapFrameRef}
+            className="map-frame"
+            style={activeMapFrameStyle}
           >
+            <div
+              ref={mapTransformLayerRef}
+              className="map-transform-layer"
+              style={{
+                transform: `translate(${activeMapViewport.offsetX}px, ${activeMapViewport.offsetY}px) scale(${activeMapViewport.scale})`,
+              }}
+            >
             <div className="map-layer-stack">
               {gmVisibleLayers.map((layer) => (
                 <div
@@ -6298,6 +6295,7 @@ export function GmWindow() {
                 </div>
               )
             })}
+            </div>
           </div>
           {visiblePlayerHandout ? (
             <div
