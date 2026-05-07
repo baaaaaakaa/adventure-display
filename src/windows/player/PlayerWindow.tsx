@@ -4,12 +4,26 @@ import {
   createInitialProjectState,
   getActiveAdventureBundle,
   playerDisplayChannelName,
+  syncProjectState,
 } from '../../lib/playerDisplay'
 import { createCssUrl } from '../../lib/css'
 import { resolvePublicAssetSrc } from '../../lib/publicAssets'
 import { getFogCellRects, getZoneFogRect } from '../../lib/fog'
 import { defaultMapGrid, tokenSpaceFootprints } from '../../types/adventure'
 import type { ProjectState } from '../../types/adventure'
+
+const playerDisplayReadyMessageType = 'player-display-ready'
+
+function isProjectStateMessage(value: unknown): value is ProjectState {
+  return (
+    Boolean(value) &&
+    typeof value === 'object' &&
+    'activeAdventureId' in value &&
+    'adventureOrder' in value &&
+    'adventures' in value &&
+    'sessions' in value
+  )
+}
 
 function EmptyPlayerState() {
   return (
@@ -35,8 +49,11 @@ export function PlayerWindow() {
     const channel = new BroadcastChannel(playerDisplayChannelName)
 
     channel.onmessage = (event) => {
-      setProjectState(event.data as ProjectState)
+      if (isProjectStateMessage(event.data)) {
+        setProjectState(syncProjectState(event.data))
+      }
     }
+    channel.postMessage({ type: playerDisplayReadyMessageType })
 
     return () => {
       channel.close()
@@ -65,10 +82,19 @@ export function PlayerWindow() {
       (entry) => entry.id === session.playerDisplay.activeHandoutId,
     ) ?? null
   const splash = scene.splash
-  const playerVisibleLayers =
+  const runtimePlayerVisibleLayers =
     sceneRuntime?.mapLayers.filter(
       (layer) => layer.visibleToPlayers && layer.imageSrc,
     ) ?? []
+  const firstPlayerVisibleLayer =
+    sceneRuntime?.mapLayers.find((layer) => layer.visibleToPlayers) ?? null
+  const fallbackPlayerMapImageSrc = sceneRuntime?.mapImageSrc ?? scene.map.imageSrc ?? null
+  const playerVisibleLayers =
+    runtimePlayerVisibleLayers.length > 0 ||
+    !firstPlayerVisibleLayer ||
+    !fallbackPlayerMapImageSrc
+      ? runtimePlayerVisibleLayers
+      : [{ ...firstPlayerVisibleLayer, imageSrc: fallbackPlayerMapImageSrc }]
   const mapGrid = sceneRuntime?.mapGrid ?? defaultMapGrid
   const mapGridAspectRatio = mapGrid.columns / mapGrid.rows
   const mapFrameStyle = {

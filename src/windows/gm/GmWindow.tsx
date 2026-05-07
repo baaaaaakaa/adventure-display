@@ -231,6 +231,49 @@ function useBroadcastChannel() {
   }, [])
   return channelRef
 }
+const playerDisplayReadyMessageType = 'player-display-ready'
+function isPlayerDisplayReadyMessage(value: unknown): value is { type: typeof playerDisplayReadyMessageType } {
+  return (
+    Boolean(value) &&
+    typeof value === 'object' &&
+    'type' in value &&
+    value.type === playerDisplayReadyMessageType
+  )
+}
+function ensurePlayerVisibleMapLayer(session: SessionState, sceneId: string): SessionState {
+  const sceneState = session.sceneStates[sceneId]
+
+  if (
+    !sceneState ||
+    sceneState.mapLayers.some((layer) => layer.visibleToPlayers && layer.imageSrc)
+  ) {
+    return session
+  }
+
+  const firstImageLayerIndex = sceneState.mapLayers.findIndex((layer) => layer.imageSrc)
+
+  if (firstImageLayerIndex < 0) {
+    return session
+  }
+
+  return {
+    ...session,
+    sceneStates: {
+      ...session.sceneStates,
+      [sceneId]: {
+        ...sceneState,
+        mapLayers: sceneState.mapLayers.map((layer, index) =>
+          index === firstImageLayerIndex
+            ? {
+                ...layer,
+                visibleToPlayers: true,
+              }
+            : layer,
+        ),
+      },
+    },
+  }
+}
 function resolveMapBoardPosition(
   board: HTMLDivElement,
   clientX: number,
@@ -2007,6 +2050,7 @@ export function GmWindow() {
   const characterImportFileInputRef = useRef<HTMLInputElement | null>(null)
   const monsterImportFileInputRef = useRef<HTMLInputElement | null>(null)
   const channelRef = useBroadcastChannel()
+  const projectStateRef = useRef(projectState)
   const activeSceneStateRef = useRef<SceneRuntimeState | null>(null)
   const activeBundle = getActiveAdventureBundle(projectState)
   const activeAdventureId = activeBundle?.adventureId ?? null
@@ -2018,8 +2062,27 @@ export function GmWindow() {
       ? activeSceneId
       : (adventure?.scenes[0]?.id ?? '')
   useEffect(() => {
+    projectStateRef.current = projectState
     channelRef.current?.postMessage(projectState)
   }, [channelRef, projectState])
+  useEffect(() => {
+    const channel = channelRef.current
+
+    if (!channel) {
+      return
+    }
+
+    const handlePlayerDisplayMessage = (event: MessageEvent) => {
+      if (isPlayerDisplayReadyMessage(event.data)) {
+        channel.postMessage(projectStateRef.current)
+      }
+    }
+
+    channel.addEventListener('message', handlePlayerDisplayMessage)
+    return () => {
+      channel.removeEventListener('message', handlePlayerDisplayMessage)
+    }
+  }, [channelRef])
   useEffect(() => {
     const audio = new Audio()
     const onPlay = () => setIsAudioPlaying(true)
@@ -2807,16 +2870,20 @@ export function GmWindow() {
       }
       return
     }
-    updateSession((currentSession) => ({
-      ...currentSession,
-      playerDisplay: {
-        ...currentSession.playerDisplay,
-        sceneId: scene.id,
-        mode: 'map',
-        activeHandoutId: null,
-        updatedAt: new Date().toISOString(),
-      },
-    }), `Игрока показана карта: ${scene.title}`)
+    updateSession((currentSession) => {
+      const sessionWithVisibleMapLayer = ensurePlayerVisibleMapLayer(currentSession, scene.id)
+
+      return {
+        ...sessionWithVisibleMapLayer,
+        playerDisplay: {
+          ...sessionWithVisibleMapLayer.playerDisplay,
+          sceneId: scene.id,
+          mode: 'map',
+          activeHandoutId: null,
+          updatedAt: new Date().toISOString(),
+        },
+      }
+    }, `Игрока показана карта: ${scene.title}`)
   }
   function pushSplashToPlayer(scene: AdventureScene) {
     if (currentPlayerMode === 'splash' && currentPlayerSceneId === scene.id) {
@@ -2953,6 +3020,9 @@ export function GmWindow() {
       playerWindowFeatures,
     )
     playerWindow?.focus()
+    window.setTimeout(() => {
+      channelRef.current?.postMessage(projectStateRef.current)
+    }, 120)
   }
   function applyLibraryImageToMap(assetId: string) {
     if (!activeScene || !adventure) {
