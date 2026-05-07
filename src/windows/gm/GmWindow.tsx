@@ -602,7 +602,7 @@ async function resolvePlayerDisplayAssetUrl(
 
   try {
     if (isProjectAssetPathReference(value) && !projectDirectoryHandle) {
-      return value
+      return null
     }
 
     const blob = isProjectAssetPathReference(value)
@@ -611,14 +611,14 @@ async function resolvePlayerDisplayAssetUrl(
         await fetch(value).then((response) => (response.ok ? response.blob() : null))
 
     if (!blob) {
-      return value
+      return null
     }
 
     const dataUrl = await readBlobAsDataUrl(blob)
     cache.set(value, dataUrl)
     return dataUrl
   } catch {
-    return value
+    return null
   }
 }
 async function hydratePlayerDisplayAssetUrls(

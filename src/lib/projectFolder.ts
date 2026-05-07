@@ -230,6 +230,31 @@ async function readBlobFromPath(root: FileSystemDirectoryHandle, relativePath: s
   return fileHandle.getFile()
 }
 
+async function readBlobAsDataUrl(blob: Blob) {
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader()
+
+    reader.addEventListener('load', () => {
+      if (typeof reader.result === 'string') {
+        resolve(reader.result)
+      } else {
+        reject(new Error('Не удалось прочитать ассет как изображение.'))
+      }
+    })
+    reader.addEventListener('error', () => {
+      reject(reader.error ?? new Error('Не удалось прочитать ассет как изображение.'))
+    })
+    reader.readAsDataURL(blob)
+  })
+}
+
+function isImageAssetBlob(blob: Blob, path: string) {
+  return (
+    blob.type.startsWith('image/') ||
+    /\.(avif|gif|jpe?g|png|svg|webp)$/i.test(path)
+  )
+}
+
 async function blobFromUrl(url: string) {
   const response = await fetch(url)
 
@@ -535,6 +560,14 @@ async function resolveAssetPath(
   }
 
   const blob = await readBlobFromPath(context.root, value)
+
+  if (isImageAssetBlob(blob, value)) {
+    const dataUrl = await readBlobAsDataUrl(blob)
+    context.objectUrlsByPath.set(value, dataUrl)
+
+    return dataUrl
+  }
+
   const objectUrl = URL.createObjectURL(blob)
   context.objectUrlsByPath.set(value, objectUrl)
   projectAssetPathsByObjectUrl.set(objectUrl, {
