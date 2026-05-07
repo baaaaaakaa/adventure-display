@@ -2166,6 +2166,7 @@ export function GmWindow() {
   const monsterImportFileInputRef = useRef<HTMLInputElement | null>(null)
   const channelRef = useBroadcastChannel()
   const projectStateRef = useRef(projectState)
+  const projectDirectoryHandleRef = useRef<FileSystemDirectoryHandle | null>(null)
   const playerDisplayAssetCacheRef = useRef<Map<string, string>>(new Map())
   const playerDisplayBroadcastIdRef = useRef(0)
   const activeSceneStateRef = useRef<SceneRuntimeState | null>(null)
@@ -2184,7 +2185,7 @@ export function GmWindow() {
     const projectStateForPlayer = await createPlayerDisplayProjectState(
       nextProjectState,
       playerDisplayAssetCacheRef.current,
-      projectDirectoryHandle,
+      projectDirectoryHandleRef.current,
     )
 
     if (playerDisplayBroadcastIdRef.current === broadcastId) {
@@ -2193,6 +2194,7 @@ export function GmWindow() {
   }
   useEffect(() => {
     projectStateRef.current = projectState
+    projectDirectoryHandleRef.current = projectDirectoryHandle
     void broadcastProjectStateToPlayer(projectState)
   }, [channelRef, projectDirectoryHandle, projectState])
   useEffect(() => {
