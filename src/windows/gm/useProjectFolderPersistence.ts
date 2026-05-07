@@ -43,6 +43,9 @@ export function useProjectFolderPersistence({
     useState<ProjectDirectoryAccessMode>(null)
   const [projectPersistenceStatus, setProjectPersistenceStatus] =
     useState<ProjectPersistenceStatus>('disconnected')
+  const [isProjectRestorePending, setIsProjectRestorePending] = useState(
+    () => supportsProjectFolders(),
+  )
   const [projectPersistenceError, setProjectPersistenceError] = useState<string | null>(null)
   const [lastProjectSaveAt, setLastProjectSaveAt] = useState<number | null>(null)
   const [rememberedProjectDirectoryName, setRememberedProjectDirectoryName] = useState<string | null>(null)
@@ -58,7 +61,12 @@ export function useProjectFolderPersistence({
   }, [onProjectLoaded])
 
   useEffect(() => {
-    if (!supportsProjectFolders() || hasRestoredProjectDirectoryRef.current) {
+    if (!supportsProjectFolders()) {
+      setIsProjectRestorePending(false)
+      return
+    }
+
+    if (hasRestoredProjectDirectoryRef.current) {
       return
     }
 
@@ -82,6 +90,9 @@ export function useProjectFolderPersistence({
           setProjectPersistenceError(null)
           setLastProjectSaveAt(null)
         }
+        if (!isCancelled) {
+          setIsProjectRestorePending(false)
+        }
         return
       }
 
@@ -90,6 +101,9 @@ export function useProjectFolderPersistence({
           setProjectPersistenceStatus('permission')
           setProjectPersistenceError(null)
           setLastProjectSaveAt(null)
+        }
+        if (!isCancelled) {
+          setIsProjectRestorePending(false)
         }
         return
       }
@@ -115,6 +129,7 @@ export function useProjectFolderPersistence({
           setProjectPersistenceStatus('permission')
           setProjectPersistenceError(null)
           setLastProjectSaveAt(null)
+          setIsProjectRestorePending(false)
           return
         }
 
@@ -135,7 +150,11 @@ export function useProjectFolderPersistence({
           historyLabel: 'Открыт проект из папки по умолчанию',
           skipFeedback: true,
         })
+        setIsProjectRestorePending(false)
       } catch {
+        if (!isCancelled) {
+          setIsProjectRestorePending(false)
+        }
         return
       }
     })()
@@ -420,6 +439,7 @@ export function useProjectFolderPersistence({
 
   return {
     projectDirectoryHandle,
+    isProjectRestorePending,
     isProjectFoldersSupported,
     projectPersistenceStatus,
     projectPersistenceMessage,

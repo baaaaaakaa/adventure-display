@@ -1998,6 +1998,7 @@ export function GmWindow() {
   } | null>(null)
   const {
     projectDirectoryHandle,
+    isProjectRestorePending,
     isProjectFoldersSupported,
     projectPersistenceStatus,
     projectPersistenceMessage,
@@ -2167,6 +2168,8 @@ export function GmWindow() {
   const channelRef = useBroadcastChannel()
   const projectStateRef = useRef(projectState)
   const projectDirectoryHandleRef = useRef<FileSystemDirectoryHandle | null>(null)
+  const isProjectRestorePendingRef = useRef(isProjectRestorePending)
+  const isPlayerBroadcastBlockedRef = useRef(false)
   const playerDisplayAssetCacheRef = useRef<Map<string, string>>(new Map())
   const playerDisplayBroadcastIdRef = useRef(0)
   const activeSceneStateRef = useRef<SceneRuntimeState | null>(null)
@@ -2180,6 +2183,10 @@ export function GmWindow() {
       ? activeSceneId
       : (adventure?.scenes[0]?.id ?? '')
   async function broadcastProjectStateToPlayer(nextProjectState = projectStateRef.current) {
+    if (isProjectRestorePendingRef.current || isPlayerBroadcastBlockedRef.current) {
+      return
+    }
+
     const broadcastId = playerDisplayBroadcastIdRef.current + 1
     playerDisplayBroadcastIdRef.current = broadcastId
     const projectStateForPlayer = await createPlayerDisplayProjectState(
@@ -2195,8 +2202,19 @@ export function GmWindow() {
   useEffect(() => {
     projectStateRef.current = projectState
     projectDirectoryHandleRef.current = projectDirectoryHandle
+    isProjectRestorePendingRef.current = isProjectRestorePending
+    isPlayerBroadcastBlockedRef.current =
+      projectPersistenceStatus === 'permission' &&
+      Boolean(projectDirectoryHandle || rememberedProjectDirectoryName)
     void broadcastProjectStateToPlayer(projectState)
-  }, [channelRef, projectDirectoryHandle, projectState])
+  }, [
+    channelRef,
+    isProjectRestorePending,
+    projectDirectoryHandle,
+    projectPersistenceStatus,
+    projectState,
+    rememberedProjectDirectoryName,
+  ])
   useEffect(() => {
     const channel = channelRef.current
 
