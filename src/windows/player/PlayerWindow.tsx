@@ -10,7 +10,7 @@ import { createCssUrl } from '../../lib/css'
 import { resolvePublicAssetSrc } from '../../lib/publicAssets'
 import { getFogCellRects, getZoneFogRect } from '../../lib/fog'
 import { defaultMapGrid, tokenSpaceFootprints } from '../../types/adventure'
-import type { ProjectState } from '../../types/adventure'
+import type { MapGridSettings, ProjectState } from '../../types/adventure'
 
 const playerDisplayReadyMessageType = 'player-display-ready'
 
@@ -23,6 +23,37 @@ function isProjectStateMessage(value: unknown): value is ProjectState {
     'adventures' in value &&
     'sessions' in value
   )
+}
+
+function doRectsOverlap(
+  left: number,
+  top: number,
+  right: number,
+  bottom: number,
+  rect: { x: number; y: number; width: number; height: number },
+) {
+  return (
+    left < rect.x + rect.width &&
+    right > rect.x &&
+    top < rect.y + rect.height &&
+    bottom > rect.y
+  )
+}
+
+function isTokenCoveredByFog(
+  token: { space: keyof typeof tokenSpaceFootprints; x: number; y: number },
+  mapGrid: MapGridSettings,
+  fogRects: Array<{ x: number; y: number; width: number; height: number }>,
+) {
+  const footprint = tokenSpaceFootprints[token.space] ?? 1
+  const halfWidth = (footprint / mapGrid.columns) * 50
+  const halfHeight = (footprint / mapGrid.rows) * 50
+  const left = token.x - halfWidth
+  const right = token.x + halfWidth
+  const top = token.y - halfHeight
+  const bottom = token.y + halfHeight
+
+  return fogRects.some((rect) => doRectsOverlap(left, top, right, bottom, rect))
 }
 
 function EmptyPlayerState() {
@@ -125,6 +156,7 @@ export function PlayerWindow() {
     : []
   const fogCellRects = getFogCellRects(effectiveFogCells, mapGrid)
   const hiddenFogZoneRects = hiddenFogZones.map((zone) => getZoneFogRect(zone))
+  const playerFogRects = [...hiddenFogZoneRects, ...fogCellRects]
   const playerFogMaskId = `player-fog-mask-${scene.id.replace(/[^a-zA-Z0-9_-]/g, '-')}`
   const playerFogSoftEdgeId = `player-fog-soft-edge-${scene.id.replace(/[^a-zA-Z0-9_-]/g, '-')}`
   const playerFogClipId = `player-fog-clip-${scene.id.replace(/[^a-zA-Z0-9_-]/g, '-')}`
@@ -132,6 +164,7 @@ export function PlayerWindow() {
   const playerVisibleZones = scene.zones.filter((zone) => zone.visibleToPlayers)
   const orderedTokens = [...(sceneRuntime?.tokens ?? [])]
     .filter((token) => !token.hiddenFromPlayers)
+    .filter((token) => !isTokenCoveredByFog(token, mapGrid, playerFogRects))
     .sort((left, right) => left.zIndex - right.zIndex)
   const activeInitiativeToken =
     sceneRuntime?.activeInitiativeTokenId
