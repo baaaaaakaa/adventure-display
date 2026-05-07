@@ -1,3 +1,4 @@
+import { useEffect, useState, type KeyboardEvent } from 'react'
 import type { MapGridSettings } from '../../types/adventure'
 import styles from './MapGridModal.module.css'
 
@@ -12,6 +13,50 @@ export function MapGridModal({
   onClose,
   onUpdateMapGrid,
 }: MapGridModalProps) {
+  const [draftGrid, setDraftGrid] = useState<Record<keyof MapGridSettings, string>>({
+    columns: String(mapGrid.columns),
+    rows: String(mapGrid.rows),
+  })
+
+  useEffect(() => {
+    setDraftGrid({
+      columns: String(mapGrid.columns),
+      rows: String(mapGrid.rows),
+    })
+  }, [mapGrid.columns, mapGrid.rows])
+
+  const commitDraftValue = (axis: keyof MapGridSettings) => {
+    const nextValue = Number(draftGrid[axis])
+
+    if (Number.isFinite(nextValue)) {
+      onUpdateMapGrid(axis, nextValue)
+      return
+    }
+
+    setDraftGrid((currentDraft) => ({
+      ...currentDraft,
+      [axis]: String(mapGrid[axis]),
+    }))
+  }
+
+  const handleDraftKeyDown = (
+    axis: keyof MapGridSettings,
+    event: KeyboardEvent<HTMLInputElement>,
+  ) => {
+    if (event.key === 'Enter') {
+      commitDraftValue(axis)
+      event.currentTarget.blur()
+    }
+
+    if (event.key === 'Escape') {
+      setDraftGrid((currentDraft) => ({
+        ...currentDraft,
+        [axis]: String(mapGrid[axis]),
+      }))
+      event.currentTarget.blur()
+    }
+  }
+
   return (
     <div
       className="modal-backdrop"
@@ -55,8 +100,15 @@ export function MapGridModal({
                   max={64}
                   step={1}
                   type="number"
-                  value={mapGrid.columns}
-                  onChange={(event) => onUpdateMapGrid('columns', Number(event.target.value))}
+                  value={draftGrid.columns}
+                  onBlur={() => commitDraftValue('columns')}
+                  onChange={(event) =>
+                    setDraftGrid((currentDraft) => ({
+                      ...currentDraft,
+                      columns: event.target.value,
+                    }))
+                  }
+                  onKeyDown={(event) => handleDraftKeyDown('columns', event)}
                 />
               </label>
               <label className="compact-inline-field">
@@ -66,8 +118,15 @@ export function MapGridModal({
                   max={64}
                   step={1}
                   type="number"
-                  value={mapGrid.rows}
-                  onChange={(event) => onUpdateMapGrid('rows', Number(event.target.value))}
+                  value={draftGrid.rows}
+                  onBlur={() => commitDraftValue('rows')}
+                  onChange={(event) =>
+                    setDraftGrid((currentDraft) => ({
+                      ...currentDraft,
+                      rows: event.target.value,
+                    }))
+                  }
+                  onKeyDown={(event) => handleDraftKeyDown('rows', event)}
                 />
               </label>
             </div>
