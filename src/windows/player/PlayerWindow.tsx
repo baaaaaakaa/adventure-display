@@ -86,15 +86,24 @@ export function PlayerWindow() {
     sceneRuntime?.mapLayers.filter(
       (layer) => layer.visibleToPlayers && layer.imageSrc,
     ) ?? []
-  const firstPlayerVisibleLayer =
-    sceneRuntime?.mapLayers.find((layer) => layer.visibleToPlayers) ?? null
   const fallbackPlayerMapImageSrc = sceneRuntime?.mapImageSrc ?? scene.map.imageSrc ?? null
+  const fallbackPlayerMapLayerSource = sceneRuntime?.mapLayers[0] ?? null
+  const fallbackPlayerMapLayer = fallbackPlayerMapImageSrc
+    ? {
+        id: `${scene.id}-player-map-fallback`,
+        title: scene.map.title,
+        imageSrc: fallbackPlayerMapImageSrc,
+        isActive: true,
+        visibleToGm: true,
+        visibleToPlayers: true,
+        scale: fallbackPlayerMapLayerSource?.scale ?? 1,
+        rotation: fallbackPlayerMapLayerSource?.rotation ?? 0,
+      }
+    : null
   const playerVisibleLayers =
-    runtimePlayerVisibleLayers.length > 0 ||
-    !firstPlayerVisibleLayer ||
-    !fallbackPlayerMapImageSrc
+    runtimePlayerVisibleLayers.length > 0 || !fallbackPlayerMapLayer
       ? runtimePlayerVisibleLayers
-      : [{ ...firstPlayerVisibleLayer, imageSrc: fallbackPlayerMapImageSrc }]
+      : [fallbackPlayerMapLayer]
   const mapGrid = sceneRuntime?.mapGrid ?? defaultMapGrid
   const mapGridAspectRatio = mapGrid.columns / mapGrid.rows
   const mapFrameStyle = {

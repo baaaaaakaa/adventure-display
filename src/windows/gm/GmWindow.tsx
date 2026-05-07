@@ -551,6 +551,76 @@ async function readBlobAsDataUrl(blob: Blob) {
     reader.readAsDataURL(blob)
   })
 }
+function isBlobUrl(value: string) {
+  return value.startsWith('blob:')
+}
+function isPlayerDisplayAssetField(fieldName: string | null) {
+  return fieldName === 'imageSrc' || fieldName === 'avatarSrc' || fieldName === 'dataUrl'
+}
+async function resolvePlayerDisplayAssetUrl(
+  value: string,
+  cache: Map<string, string>,
+) {
+  if (!isBlobUrl(value)) {
+    return value
+  }
+
+  const cachedValue = cache.get(value)
+
+  if (cachedValue) {
+    return cachedValue
+  }
+
+  try {
+    const response = await fetch(value)
+
+    if (!response.ok) {
+      return value
+    }
+
+    const dataUrl = await readBlobAsDataUrl(await response.blob())
+    cache.set(value, dataUrl)
+    return dataUrl
+  } catch {
+    return value
+  }
+}
+async function hydratePlayerDisplayAssetUrls(
+  value: unknown,
+  cache: Map<string, string>,
+  fieldName: string | null = null,
+): Promise<unknown> {
+  if (typeof value === 'string') {
+    return isPlayerDisplayAssetField(fieldName)
+      ? resolvePlayerDisplayAssetUrl(value, cache)
+      : value
+  }
+
+  if (Array.isArray(value)) {
+    for (let index = 0; index < value.length; index += 1) {
+      value[index] = await hydratePlayerDisplayAssetUrls(value[index], cache)
+    }
+    return value
+  }
+
+  if (value && typeof value === 'object') {
+    const record = value as Record<string, unknown>
+
+    for (const [key, entry] of Object.entries(record)) {
+      record[key] = await hydratePlayerDisplayAssetUrls(entry, cache, key)
+    }
+  }
+
+  return value
+}
+async function createPlayerDisplayProjectState(
+  projectState: ProjectState,
+  cache: Map<string, string>,
+) {
+  const projectStateForPlayer = JSON.parse(JSON.stringify(projectState)) as ProjectState
+  await hydratePlayerDisplayAssetUrls(projectStateForPlayer, cache)
+  return projectStateForPlayer
+}
 async function createAssetRecordFromFile(
   file: File,
   kind: AssetKind,
@@ -2051,6 +2121,8 @@ export function GmWindow() {
   const monsterImportFileInputRef = useRef<HTMLInputElement | null>(null)
   const channelRef = useBroadcastChannel()
   const projectStateRef = useRef(projectState)
+  const playerDisplayAssetCacheRef = useRef<Map<string, string>>(new Map())
+  const playerDisplayBroadcastIdRef = useRef(0)
   const activeSceneStateRef = useRef<SceneRuntimeState | null>(null)
   const activeBundle = getActiveAdventureBundle(projectState)
   const activeAdventureId = activeBundle?.adventureId ?? null
@@ -2061,9 +2133,21 @@ export function GmWindow() {
     adventure?.scenes.some((scene) => scene.id === activeSceneId)
       ? activeSceneId
       : (adventure?.scenes[0]?.id ?? '')
+  async function broadcastProjectStateToPlayer(nextProjectState = projectStateRef.current) {
+    const broadcastId = playerDisplayBroadcastIdRef.current + 1
+    playerDisplayBroadcastIdRef.current = broadcastId
+    const projectStateForPlayer = await createPlayerDisplayProjectState(
+      nextProjectState,
+      playerDisplayAssetCacheRef.current,
+    )
+
+    if (playerDisplayBroadcastIdRef.current === broadcastId) {
+      channelRef.current?.postMessage(projectStateForPlayer)
+    }
+  }
   useEffect(() => {
     projectStateRef.current = projectState
-    channelRef.current?.postMessage(projectState)
+    void broadcastProjectStateToPlayer(projectState)
   }, [channelRef, projectState])
   useEffect(() => {
     const channel = channelRef.current
@@ -2074,7 +2158,7 @@ export function GmWindow() {
 
     const handlePlayerDisplayMessage = (event: MessageEvent) => {
       if (isPlayerDisplayReadyMessage(event.data)) {
-        channel.postMessage(projectStateRef.current)
+        void broadcastProjectStateToPlayer()
       }
     }
 
@@ -3021,7 +3105,7 @@ export function GmWindow() {
     )
     playerWindow?.focus()
     window.setTimeout(() => {
-      channelRef.current?.postMessage(projectStateRef.current)
+      void broadcastProjectStateToPlayer()
     }, 120)
   }
   function applyLibraryImageToMap(assetId: string) {
