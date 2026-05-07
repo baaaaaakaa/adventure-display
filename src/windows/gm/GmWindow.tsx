@@ -1799,7 +1799,10 @@ export function GmWindow() {
   const [isMapLayersModalOpen, setIsMapLayersModalOpen] = useState(false)
   const [isTokenModalOpen, setIsTokenModalOpen] = useState(false)
   const [isZoneModalOpen, setIsZoneModalOpen] = useState(false)
-  const [mapGridCellSize, setMapGridCellSize] = useState<number | null>(null)
+  const [mapGridCellSize, setMapGridCellSize] = useState<{
+    width: number
+    height: number
+  } | null>(null)
   const [openCompactZoneToolsZoneId, setOpenCompactZoneToolsZoneId] = useState<string | null>(null)
   const [hoveredZoneResizeHandle, setHoveredZoneResizeHandle] = useState<{
     zoneId: string
@@ -2220,15 +2223,21 @@ export function GmWindow() {
     }
     const updateGridCellSize = () => {
       const rect = board.getBoundingClientRect()
-      const nextCellSize = Math.max(
-        1,
-        rect.width / activeMapGrid.columns,
-      )
-      setMapGridCellSize((currentCellSize) =>
-        currentCellSize != null && Math.abs(currentCellSize - nextCellSize) < 0.5
-          ? currentCellSize
-          : nextCellSize,
-      )
+      const nextCellSize = {
+        width: Math.max(1, rect.width / activeMapGrid.columns),
+        height: Math.max(1, rect.height / activeMapGrid.rows),
+      }
+      setMapGridCellSize((currentCellSize) => {
+        if (
+          currentCellSize != null &&
+          Math.abs(currentCellSize.width - nextCellSize.width) < 0.5 &&
+          Math.abs(currentCellSize.height - nextCellSize.height) < 0.5
+        ) {
+          return currentCellSize
+        }
+
+        return nextCellSize
+      })
     }
     updateGridCellSize()
     if (typeof ResizeObserver === 'undefined') {
@@ -5935,7 +5944,7 @@ export function GmWindow() {
                 className="map-grid-overlay"
                 style={{
                   backgroundSize: mapGridCellSize
-                    ? `${mapGridCellSize}px ${mapGridCellSize}px`
+                    ? `${mapGridCellSize.width}px ${mapGridCellSize.height}px`
                     : `${100 / activeMapGrid.columns}% ${100 / activeMapGrid.rows}%`,
                 }}
               />
@@ -6181,8 +6190,11 @@ export function GmWindow() {
                   left: `${token.x}%`,
                   top: `${token.y}%`,
                   width: mapGridCellSize
-                    ? `${tokenSpaceFootprints[token.space] * mapGridCellSize}px`
+                    ? `${tokenSpaceFootprints[token.space] * mapGridCellSize.width}px`
                     : `${(tokenSpaceFootprints[token.space] / activeMapGrid.columns) * 100}%`,
+                  height: mapGridCellSize
+                    ? `${tokenSpaceFootprints[token.space] * mapGridCellSize.height}px`
+                    : `${(tokenSpaceFootprints[token.space] / activeMapGrid.rows) * 100}%`,
                   backgroundImage: `url(${token.imageSrc})`,
                   transform: `translate(-50%, -50%) rotate(${getTokenRotation(token)}deg)`,
                   zIndex: token.id === activeInitiativeToken?.id ? token.zIndex + 1000 : token.zIndex,

@@ -229,7 +229,7 @@ export function PlayerWindow() {
               <div
                 className="map-grid-overlay"
                 style={{
-                  backgroundSize: `calc(100vw / ${mapGrid.columns}) calc(100vw / ${mapGrid.columns})`,
+                  backgroundSize: `${100 / mapGrid.columns}% ${100 / mapGrid.rows}%`,
                 }}
               />
             ) : null}
@@ -260,7 +260,8 @@ export function PlayerWindow() {
                 style={{
                   left: `${token.x}%`,
                   top: `${token.y}%`,
-                  width: `calc((100vw / ${mapGrid.columns}) * ${tokenSpaceFootprints[token.space]})`,
+                  width: `${(tokenSpaceFootprints[token.space] / mapGrid.columns) * 100}%`,
+                  height: `${(tokenSpaceFootprints[token.space] / mapGrid.rows) * 100}%`,
                   backgroundImage: `url(${token.imageSrc})`,
                   transform: `translate(-50%, -50%) rotate(${token.rotation}deg)`,
                   zIndex: token.zIndex,
