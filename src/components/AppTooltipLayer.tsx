@@ -14,7 +14,7 @@ type TooltipCoordinates = {
   top: number
 }
 
-const tooltipTargetSelector = '[data-tooltip], [data-overflow-tooltip], input, select, textarea'
+const tooltipTargetSelector = '[data-tooltip], [data-overflow-tooltip], input, select'
 const tooltipDisabledSelector = '[data-tooltip-disabled="true"]'
 const textInputTypesWithoutOverflowTooltip = new Set([
   'button',
@@ -131,6 +131,10 @@ function getTooltipTarget(element: EventTarget | null) {
     return null
   }
 
+  if (target instanceof HTMLTextAreaElement) {
+    return null
+  }
+
   return target
 }
 
@@ -198,16 +202,6 @@ function getFormControlOverflowTooltip(element: HTMLElement) {
     return value
   }
 
-  if (element instanceof HTMLTextAreaElement) {
-    const value = element.value.trim()
-
-    if (!value || !isElementOverflowing(element)) {
-      return null
-    }
-
-    return value
-  }
-
   return null
 }
 
@@ -217,10 +211,10 @@ function refreshGeneratedOverflowTooltips(root: ParentNode = document) {
   }
 
   const tooltipElements = [
-    ...(root instanceof HTMLElement && root.matches('input, select, textarea, [data-overflow-tooltip]')
+    ...(root instanceof HTMLElement && root.matches('input, select, [data-overflow-tooltip]')
       ? [root]
       : []),
-    ...Array.from(root.querySelectorAll<HTMLElement>('input, select, textarea, [data-overflow-tooltip]')),
+    ...Array.from(root.querySelectorAll<HTMLElement>('input, select, [data-overflow-tooltip]')),
   ]
 
   tooltipElements.forEach((element) => {
