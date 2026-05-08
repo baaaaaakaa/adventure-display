@@ -7095,7 +7095,19 @@ export function GmWindow() {
                       >
                         <i aria-hidden="true" className="fa-solid fa-plus" />
                       </button>
-                    ) : null}          {activeEditorTab === 'monsters' ? (
+                    ) : null}
+                    {activeEditorTab === 'checks' ? (
+                      <button
+                        aria-label="Добавить проверку"
+                        className="ghost-button compact-button token-modal-icon-button"
+                        data-tooltip="Добавить проверку"
+                        onClick={addCheckClueEntry}
+                        type="button"
+                      >
+                        <i aria-hidden="true" className="fa-solid fa-plus" />
+                      </button>
+                    ) : null}
+                    {activeEditorTab === 'monsters' ? (
                       <span className="scene-editor-panel-title-actions">
                         <button
                           aria-label="Добавить монстра"
