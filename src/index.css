@@ -1980,14 +1980,14 @@ textarea:focus {
 .map-grid-overlay {
   z-index: 2;
   background-image:
-    linear-gradient(rgba(255, 255, 255, 0.14) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255, 255, 255, 0.14) 1px, transparent 1px);
+    linear-gradient(rgba(255, 255, 255, 0.34) 1px, rgba(16, 12, 9, 0.18) 1px, transparent 2px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.34) 1px, rgba(16, 12, 9, 0.18) 1px, transparent 2px);
   pointer-events: none;
 }
 
 .map-board.with-image .map-grid-overlay,
 .player-map-board.with-image .map-grid-overlay {
-  opacity: 0.58;
+  opacity: 0.9;
 }
 
 .map-layer {
