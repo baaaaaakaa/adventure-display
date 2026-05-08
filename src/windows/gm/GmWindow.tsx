@@ -7096,17 +7096,6 @@ export function GmWindow() {
                         <i aria-hidden="true" className="fa-solid fa-plus" />
                       </button>
                     ) : null}
-                    {activeEditorTab === 'checks' ? (
-                      <button
-                        aria-label="Добавить проверку"
-                        className="ghost-button compact-button token-modal-icon-button"
-                        data-tooltip="Добавить проверку"
-                        onClick={addCheckClueEntry}
-                        type="button"
-                      >
-                        <i aria-hidden="true" className="fa-solid fa-plus" />
-                      </button>
-                    ) : null}
                     {activeEditorTab === 'monsters' ? (
                       <span className="scene-editor-panel-title-actions">
                         <button
@@ -7156,6 +7145,17 @@ export function GmWindow() {
                   </div>
                 ) : null}
               </div>
+              {activeEditorTab === 'checks' && !linkedCheckPreviewEntry ? (
+                <button
+                  aria-label="Добавить проверку"
+                  className="ghost-button compact-button token-modal-icon-button"
+                  data-tooltip="Добавить проверку"
+                  onClick={addCheckClueEntry}
+                  type="button"
+                >
+                  <i aria-hidden="true" className="fa-solid fa-plus" />
+                </button>
+              ) : null}
               <button
                 aria-label="Закрыть редактор сцены"
                 className="ghost-button compact-button token-modal-icon-button"
