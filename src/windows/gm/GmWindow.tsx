@@ -3026,6 +3026,20 @@ export function GmWindow() {
     window.addEventListener('pointerup', handleUp)
   }
   function handleZonePointerDown(zoneId: string, event: ReactPointerEvent<HTMLDivElement>) {
+    if (mapInteractionMode === 'marker') {
+      event.preventDefault()
+      event.stopPropagation()
+      suppressZoneClickRef.current = true
+      addServiceMarkerAt(event.clientX, event.clientY)
+      return
+    }
+    if (mapInteractionMode === 'token') {
+      event.preventDefault()
+      event.stopPropagation()
+      suppressZoneClickRef.current = true
+      addTokenAt(event.clientX, event.clientY)
+      return
+    }
     const resizeHandle = getZoneResizeHandle(event.currentTarget, event.clientX, event.clientY)
     if (resizeHandle) {
       beginZoneResize(zoneId, resizeHandle, event)
