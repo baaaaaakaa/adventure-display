@@ -81,6 +81,12 @@ export function MapLayersModal({
                   key={layer.id}
                   onClick={() => onSetActiveLayer(layer.id)}
                 >
+                  <div className="layer-row-content">
+                    <strong>{layer.title}</strong>
+                    <span className="scene-card-summary">
+                      {index === 0 ? 'Базовый слой' : 'Дополнительный слой'}
+                    </span>
+                  </div>
                   {index > 0 ? (
                     <button
                       aria-label="Удалить слой"
@@ -95,12 +101,6 @@ export function MapLayersModal({
                       <i aria-hidden="true" className="fa-solid fa-trash" />
                     </button>
                   ) : null}
-                  <div className="layer-row-content">
-                    <strong>{layer.title}</strong>
-                    <span className="scene-card-summary">
-                      {index === 0 ? 'Базовый слой' : 'Дополнительный слой'}
-                    </span>
-                  </div>
                 </div>
               ))}
             </div>

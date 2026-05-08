@@ -207,6 +207,21 @@
   padding: 2px 4px 2px 0;
 }
 
+.list :global(.layer-row) {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+}
+
+.list :global(.layer-row-content) {
+  padding-right: 0;
+}
+
+.list :global(.layer-row-delete-button) {
+  position: static;
+  align-self: center;
+  margin-left: 8px;
+}
+
 .sidebarHeader {
   align-items: center;
   margin-bottom: -6px;
