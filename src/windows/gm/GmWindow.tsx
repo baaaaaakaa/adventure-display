@@ -11,6 +11,7 @@ import {
 import { sampleAdventure } from '../../data/sampleAdventure'
 import { StyledSelect } from '../../components/StyledSelect'
 import { AudioEditorPanel } from './AudioEditorPanel'
+import { CheckClueNotesModal } from './CheckClueNotesModal'
 import { ChecksEditorPanel } from './ChecksEditorPanel'
 import { GmNotesPanel } from './GmNotesPanel'
 import { HandoutsEditorPanel } from './HandoutsEditorPanel'
@@ -1944,6 +1945,8 @@ export function GmWindow() {
   const [isSceneEditorActionsOpen, setIsSceneEditorActionsOpen] = useState(false)
   const [isInitiativeTrackerVisible, setIsInitiativeTrackerVisible] = useState(true)
   const [isGmNotesVisible, setIsGmNotesVisible] = useState(false)
+  const [isCheckClueNotesVisible, setIsCheckClueNotesVisible] = useState(false)
+  const [selectedCheckClueNotesEntryId, setSelectedCheckClueNotesEntryId] = useState<string | null>(null)
   const [mapInteractionMode, setMapInteractionMode] =
     useState<MapInteractionMode>('navigate')
   const [isServiceMarkerModalOpen, setIsServiceMarkerModalOpen] = useState(false)
@@ -4855,13 +4858,14 @@ export function GmWindow() {
   }
   function addCheckClueEntry() {
     if (!activeScene) {
-      return
+      return null
     }
     const nextEntry = createDefaultCheckClueEntry()
     updateScene(activeScene.id, (scene) => ({
       ...scene,
       checksClues: [...scene.checksClues, nextEntry],
     }), 'Добавлена проверка')
+    return nextEntry.id
   }
   function updateCheckClueEntry(
     entryId: string,
@@ -4894,6 +4898,30 @@ export function GmWindow() {
         marker.linkedCheckId === entryId ? { ...marker, linkedCheckId: null } : marker,
       ),
     }))
+    setSelectedCheckClueNotesEntryId((currentId) => (currentId === entryId ? null : currentId))
+  }
+  function showCheckClueNotes() {
+    if (!activeScene) {
+      return
+    }
+
+    const entryId = selectedCheckClueNotesEntryId ?? activeScene.checksClues[0]?.id ?? addCheckClueEntry()
+
+    setSelectedCheckClueNotesEntryId(entryId)
+    setIsCheckClueNotesVisible(true)
+  }
+  function toggleCheckClueNotes() {
+    if (isCheckClueNotesVisible) {
+      setIsCheckClueNotesVisible(false)
+      return
+    }
+
+    showCheckClueNotes()
+  }
+  function addCheckClueEntryFromNotesModal() {
+    const entryId = addCheckClueEntry()
+
+    setSelectedCheckClueNotesEntryId(entryId)
   }
   function renameSceneId(nextIdRaw: string) {
     if (!activeScene) {
@@ -6655,6 +6683,7 @@ export function GmWindow() {
           <MapUtilityPanel
             activeMapScale={activeMapViewport.scale}
             hasFog={activeSceneState.fogCells.length > 0 || activeSceneState.hiddenZoneIds.length > 0}
+            isCheckClueNotesVisible={isCheckClueNotesVisible}
             isGmNotesVisible={isGmNotesVisible}
             isInitiativeTrackerVisible={isInitiativeTrackerVisible}
             mapInteractionMode={mapInteractionMode}
@@ -6662,6 +6691,7 @@ export function GmWindow() {
             onClearAllFog={clearAllFog}
             onResetMapViewport={resetMapViewport}
             onSetMapInteractionMode={setMapInteractionMode}
+            onToggleCheckClueNotes={toggleCheckClueNotes}
             onToggleGmNotes={() => setIsGmNotesVisible((currentValue) => !currentValue)}
             onToggleInitiativeTracker={() => setIsInitiativeTrackerVisible((currentValue) => !currentValue)}
             onZoomMap={zoomMap}
@@ -6671,6 +6701,19 @@ export function GmWindow() {
             onClose={() => setIsGmNotesVisible(false)}
             scene={activeScene}
           />
+          {isCheckClueNotesVisible ? (
+            <CheckClueNotesModal
+              abilityOptions={checkAbilityOptions}
+              difficultyOptions={checkDifficultyOptions}
+              scene={activeScene}
+              selectedEntryId={selectedCheckClueNotesEntryId}
+              onAddEntry={addCheckClueEntryFromNotesModal}
+              onClose={() => setIsCheckClueNotesVisible(false)}
+              onRemoveEntry={removeCheckClueEntry}
+              onSelectEntry={setSelectedCheckClueNotesEntryId}
+              onUpdateEntry={updateCheckClueEntry}
+            />
+          ) : null}
           <MapCornerPanel
             isMapGridVisible={isMapGridVisible}
             onOpenGridSettings={() => setIsMapGridModalOpen(true)}

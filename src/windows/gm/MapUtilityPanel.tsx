@@ -14,6 +14,7 @@ export type MapInteractionMode =
 type MapUtilityPanelProps = {
   activeMapScale: number
   hasFog: boolean
+  isCheckClueNotesVisible: boolean
   isGmNotesVisible: boolean
   isInitiativeTrackerVisible: boolean
   mapInteractionMode: MapInteractionMode
@@ -21,6 +22,7 @@ type MapUtilityPanelProps = {
   onClearAllFog: () => void
   onResetMapViewport: () => void
   onSetMapInteractionMode: (mode: MapInteractionMode) => void
+  onToggleCheckClueNotes: () => void
   onToggleGmNotes: () => void
   onToggleInitiativeTracker: () => void
   onZoomMap: (delta: number) => void
@@ -40,6 +42,7 @@ function cx(...classNames: Array<string | false>) {
 export function MapUtilityPanel({
   activeMapScale,
   hasFog,
+  isCheckClueNotesVisible,
   isGmNotesVisible,
   isInitiativeTrackerVisible,
   mapInteractionMode,
@@ -47,6 +50,7 @@ export function MapUtilityPanel({
   onClearAllFog,
   onResetMapViewport,
   onSetMapInteractionMode,
+  onToggleCheckClueNotes,
   onToggleGmNotes,
   onToggleInitiativeTracker,
   onZoomMap,
@@ -139,6 +143,18 @@ export function MapUtilityPanel({
           aria-label={isGmNotesVisible ? 'Скрыть заметки мастера' : 'Показать заметки мастера'}
         >
           <i className="fa-solid fa-scroll" aria-hidden="true" />
+        </button>
+      </div>
+
+      <div className={overlayStyles.group}>
+        <button
+          className={cx(overlayStyles.button, overlayStyles.groupTrigger, overlayStyles.sideTooltip, isCheckClueNotesVisible && overlayStyles.active)}
+          onClick={onToggleCheckClueNotes}
+          type="button"
+          data-tooltip={isCheckClueNotesVisible ? 'Скрыть заметки улики' : 'Показать заметки улики'}
+          aria-label={isCheckClueNotesVisible ? 'Скрыть заметки улики' : 'Показать заметки улики'}
+        >
+          <i className="fa-solid fa-magnifying-glass" aria-hidden="true" />
         </button>
       </div>
     </div>
