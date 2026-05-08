@@ -1461,11 +1461,19 @@ textarea:focus {
 }
 
 .scene-list.scene-menu-list > button {
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
   cursor: pointer;
 }
 
 .scene-list.scene-menu-list > button * {
   cursor: pointer;
+}
+
+.scene-list.scene-menu-list .scene-menu-scene-index {
+  color: var(--text-muted);
+  font-size: 0.88rem;
 }
 
 .adventure-list.scene-menu-list .scene-menu-entry-title {

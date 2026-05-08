@@ -6199,11 +6199,10 @@ export function GmWindow() {
                         }}
                         type="button"
                       >
-                        <span className="scene-card-location">
-                          {index + 1}. {scene.location}
+                        <span className="scene-menu-scene-index">
+                          {index + 1}.
                         </span>
                         <strong>{scene.title}</strong>
-                        <span className="scene-card-summary">{scene.gmSummary || scene.map.title}</span>
                       </button>
                     ))}
                   </div>
