@@ -109,6 +109,40 @@
   color: rgba(255, 247, 235, 0.62);
 }
 
+.spoiler {
+  display: grid;
+  gap: 7px;
+}
+
+.spoilerSummary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 10px;
+  background: rgba(255, 247, 235, 0.07);
+  color: rgba(255, 247, 235, 0.72);
+  cursor: pointer;
+  font-size: 0.78rem;
+  font-weight: 700;
+  line-height: 1.1;
+  list-style: none;
+}
+
+.spoilerSummary::-webkit-details-marker {
+  display: none;
+}
+
+.spoilerSummary i {
+  font-size: 0.72rem;
+  transition: transform 140ms ease;
+}
+
+.spoiler[open] .spoilerSummary i {
+  transform: rotate(180deg);
+}
+
 .text {
   margin: 0;
   color: rgba(255, 247, 235, 0.86);

@@ -45,9 +45,15 @@ export function CheckClueNotesPanel({ isVisible, onClose, scene }: CheckClueNote
                 <strong>{entry.ability || `Проверка ${index + 1}`}</strong>
                 <span>{entry.difficulty || 'без сложности'}</span>
               </div>
-              <p className={styles.text}>
-                {entry.outcome || 'Результат проверки не заполнен.'}
-              </p>
+              <details className={styles.spoiler}>
+                <summary className={styles.spoilerSummary}>
+                  <span>Спойлер</span>
+                  <i aria-hidden="true" className="fa-solid fa-chevron-down" />
+                </summary>
+                <p className={styles.text}>
+                  {entry.outcome || 'Результат проверки не заполнен.'}
+                </p>
+              </details>
             </article>
           ))
         ) : (
