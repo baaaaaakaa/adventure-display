@@ -3,6 +3,8 @@ import styles from './MapTitleBadge.module.css'
 type MapTitleBadgeProps = {
   audioLabel: string
   canRedo: boolean
+  canGoNextScene: boolean
+  canGoPreviousScene: boolean
   canShowQuickHandout: boolean
   canUndo: boolean
   isPlayerShowingActiveMap: boolean
@@ -12,6 +14,8 @@ type MapTitleBadgeProps = {
   materialLabel: string
   onOpenMapParams: () => void
   onOpenPlayerWindow: () => void
+  onGoNextScene: () => void
+  onGoPreviousScene: () => void
   onPushMapToPlayer: () => void
   onPushQuickHandout: () => void
   onPushSplashToPlayer: () => void
@@ -29,6 +33,8 @@ function cx(...classNames: Array<string | false>) {
 export function MapTitleBadge({
   audioLabel,
   canRedo,
+  canGoNextScene,
+  canGoPreviousScene,
   canShowQuickHandout,
   canUndo,
   isPlayerShowingActiveMap,
@@ -38,6 +44,8 @@ export function MapTitleBadge({
   materialLabel,
   onOpenMapParams,
   onOpenPlayerWindow,
+  onGoNextScene,
+  onGoPreviousScene,
   onPushMapToPlayer,
   onPushQuickHandout,
   onPushSplashToPlayer,
@@ -80,6 +88,26 @@ export function MapTitleBadge({
         </div>
       </div>
       <div className={styles.actions} role="toolbar" aria-label="Быстрые действия сцены">
+        <button
+          className={cx('toolbar-button', styles.actionButton)}
+          disabled={!canGoPreviousScene}
+          onClick={onGoPreviousScene}
+          type="button"
+          title="Предыдущая сцена"
+          aria-label="Предыдущая сцена"
+        >
+          <i className="fa-solid fa-chevron-left" aria-hidden="true" />
+        </button>
+        <button
+          className={cx('toolbar-button', styles.actionButton)}
+          disabled={!canGoNextScene}
+          onClick={onGoNextScene}
+          type="button"
+          title="Следующая сцена"
+          aria-label="Следующая сцена"
+        >
+          <i className="fa-solid fa-chevron-right" aria-hidden="true" />
+        </button>
         <button
           className={cx('toolbar-button toolbar-button-primary', styles.actionButton, isPlayerShowingActiveSplash && 'is-active')}
           onClick={onPushSplashToPlayer}

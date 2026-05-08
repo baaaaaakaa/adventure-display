@@ -2274,6 +2274,16 @@ export function GmWindow() {
     adventure?.scenes.find((scene) => scene.id === resolvedActiveSceneId) ??
     adventure?.scenes[0] ??
     null
+  const activeSceneIndex =
+    adventure && activeScene
+      ? adventure.scenes.findIndex((scene) => scene.id === activeScene.id)
+      : -1
+  const previousSceneId =
+    activeSceneIndex > 0 ? (adventure?.scenes[activeSceneIndex - 1]?.id ?? null) : null
+  const nextSceneId =
+    adventure && activeSceneIndex >= 0 && activeSceneIndex < adventure.scenes.length - 1
+      ? (adventure.scenes[activeSceneIndex + 1]?.id ?? null)
+      : null
   const activeSceneMonsterIds = new Set(activeScene?.monsterIds ?? [])
   const sceneMonsters = adventureMonsters.filter((monster) => activeSceneMonsterIds.has(monster.id))
   const linkedCheckPreviewEntry =
@@ -6694,6 +6704,8 @@ export function GmWindow() {
           <MapTitleBadge
             audioLabel={activeAudioTrack ? `${isAudioPlaying ? "Играет" : "Пауза"}: ${activeAudioTrack.title}` : "Аудио не выбрано"}
             canRedo={redoStack.length > 0}
+            canGoNextScene={Boolean(nextSceneId)}
+            canGoPreviousScene={Boolean(previousSceneId)}
             canShowQuickHandout={Boolean(quickSceneHandout)}
             canUndo={undoStack.length > 0}
             isPlayerShowingActiveMap={isPlayerShowingActiveMap}
@@ -6705,6 +6717,16 @@ export function GmWindow() {
                 ? currentPlayerSplash?.title ?? "Splash не настроен"
                 : currentPlayerHandout?.title ?? "Раздатка не выбрана"
             }
+            onGoNextScene={() => {
+              if (nextSceneId) {
+                handleSceneChange(nextSceneId)
+              }
+            }}
+            onGoPreviousScene={() => {
+              if (previousSceneId) {
+                handleSceneChange(previousSceneId)
+              }
+            }}
             onOpenMapParams={() => setIsMapParamsModalOpen(true)}
             onOpenPlayerWindow={openPlayerWindow}
             onPushMapToPlayer={() => pushMapToPlayer(activeScene)}
