@@ -6016,6 +6016,9 @@ export function GmWindow() {
                           setIsSceneMenuOpen(false)
                         }}
                         onKeyDown={(event) => {
+                          if (isEditableEventTarget(event.target)) {
+                            return
+                          }
                           if (event.key === 'Enter' || event.key === ' ') {
                             event.preventDefault()
                             switchAdventure(adventureId)
