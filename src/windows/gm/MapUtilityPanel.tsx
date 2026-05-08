@@ -151,8 +151,8 @@ export function MapUtilityPanel({
           className={cx(overlayStyles.button, overlayStyles.groupTrigger, overlayStyles.sideTooltip, isCheckClueNotesVisible && overlayStyles.active)}
           onClick={onToggleCheckClueNotes}
           type="button"
-          data-tooltip={isCheckClueNotesVisible ? 'Скрыть заметки улики' : 'Показать заметки улики'}
-          aria-label={isCheckClueNotesVisible ? 'Скрыть заметки улики' : 'Показать заметки улики'}
+          data-tooltip={isCheckClueNotesVisible ? 'Скрыть проверки' : 'Показать проверки'}
+          aria-label={isCheckClueNotesVisible ? 'Скрыть проверки' : 'Показать проверки'}
         >
           <i className="fa-solid fa-magnifying-glass" aria-hidden="true" />
         </button>

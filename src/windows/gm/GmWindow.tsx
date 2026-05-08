@@ -11,7 +11,7 @@ import {
 import { sampleAdventure } from '../../data/sampleAdventure'
 import { StyledSelect } from '../../components/StyledSelect'
 import { AudioEditorPanel } from './AudioEditorPanel'
-import { CheckClueNotesModal } from './CheckClueNotesModal'
+import { CheckClueNotesPanel } from './CheckClueNotesPanel'
 import { ChecksEditorPanel } from './ChecksEditorPanel'
 import { GmNotesPanel } from './GmNotesPanel'
 import { HandoutsEditorPanel } from './HandoutsEditorPanel'
@@ -1946,7 +1946,6 @@ export function GmWindow() {
   const [isInitiativeTrackerVisible, setIsInitiativeTrackerVisible] = useState(true)
   const [isGmNotesVisible, setIsGmNotesVisible] = useState(false)
   const [isCheckClueNotesVisible, setIsCheckClueNotesVisible] = useState(false)
-  const [selectedCheckClueNotesEntryId, setSelectedCheckClueNotesEntryId] = useState<string | null>(null)
   const [mapInteractionMode, setMapInteractionMode] =
     useState<MapInteractionMode>('navigate')
   const [isServiceMarkerModalOpen, setIsServiceMarkerModalOpen] = useState(false)
@@ -4898,30 +4897,9 @@ export function GmWindow() {
         marker.linkedCheckId === entryId ? { ...marker, linkedCheckId: null } : marker,
       ),
     }))
-    setSelectedCheckClueNotesEntryId((currentId) => (currentId === entryId ? null : currentId))
-  }
-  function showCheckClueNotes() {
-    if (!activeScene) {
-      return
-    }
-
-    const entryId = selectedCheckClueNotesEntryId ?? activeScene.checksClues[0]?.id ?? addCheckClueEntry()
-
-    setSelectedCheckClueNotesEntryId(entryId)
-    setIsCheckClueNotesVisible(true)
   }
   function toggleCheckClueNotes() {
-    if (isCheckClueNotesVisible) {
-      setIsCheckClueNotesVisible(false)
-      return
-    }
-
-    showCheckClueNotes()
-  }
-  function addCheckClueEntryFromNotesModal() {
-    const entryId = addCheckClueEntry()
-
-    setSelectedCheckClueNotesEntryId(entryId)
+    setIsCheckClueNotesVisible((currentValue) => !currentValue)
   }
   function renameSceneId(nextIdRaw: string) {
     if (!activeScene) {
@@ -6701,19 +6679,11 @@ export function GmWindow() {
             onClose={() => setIsGmNotesVisible(false)}
             scene={activeScene}
           />
-          {isCheckClueNotesVisible ? (
-            <CheckClueNotesModal
-              abilityOptions={checkAbilityOptions}
-              difficultyOptions={checkDifficultyOptions}
-              scene={activeScene}
-              selectedEntryId={selectedCheckClueNotesEntryId}
-              onAddEntry={addCheckClueEntryFromNotesModal}
-              onClose={() => setIsCheckClueNotesVisible(false)}
-              onRemoveEntry={removeCheckClueEntry}
-              onSelectEntry={setSelectedCheckClueNotesEntryId}
-              onUpdateEntry={updateCheckClueEntry}
-            />
-          ) : null}
+          <CheckClueNotesPanel
+            isVisible={isCheckClueNotesVisible}
+            onClose={() => setIsCheckClueNotesVisible(false)}
+            scene={activeScene}
+          />
           <MapCornerPanel
             isMapGridVisible={isMapGridVisible}
             onOpenGridSettings={() => setIsMapGridModalOpen(true)}
