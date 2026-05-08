@@ -4,7 +4,6 @@ import {
   createInitialProjectState,
   getActiveAdventureBundle,
   playerDisplayChannelName,
-  syncProjectState,
 } from '../../lib/playerDisplay'
 import { createCssUrl } from '../../lib/css'
 import { resolvePublicAssetSrc } from '../../lib/publicAssets'
@@ -50,7 +49,7 @@ export function PlayerWindow() {
 
     channel.onmessage = (event) => {
       if (isProjectStateMessage(event.data)) {
-        setProjectState(syncProjectState(event.data))
+        setProjectState(event.data)
       }
     }
     channel.postMessage({ type: playerDisplayReadyMessageType })

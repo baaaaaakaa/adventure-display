@@ -72,6 +72,12 @@ body {
   min-width: 320px;
 }
 
+html.player-window-root,
+html.player-window-root body,
+html.player-window-root #root {
+  background: #111416;
+}
+
 button,
 input,
 textarea,
