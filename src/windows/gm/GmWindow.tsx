@@ -7108,6 +7108,17 @@ export function GmWindow() {
                             ? 'Проверки и улики'
                             : editorTabLabels[activeEditorTab]}
                     </h2>
+                    {activeEditorTab === 'checks' ? (
+                      <button
+                        aria-label="Добавить проверку"
+                        className="ghost-button compact-button token-modal-icon-button scene-editor-title-add-button scene-editor-checks-add-button"
+                        data-tooltip="Добавить проверку"
+                        onClick={addCheckClueEntry}
+                        type="button"
+                      >
+                        <i aria-hidden="true" className="fa-solid fa-plus" />
+                      </button>
+                    ) : null}
                     {activeEditorTab === 'scene' ? (
                       <button
                         aria-label="Удалить сцену"
@@ -7179,17 +7190,6 @@ export function GmWindow() {
                   </div>
                 ) : null}
               </div>
-              {activeEditorTab === 'checks' && !linkedCheckPreviewEntry ? (
-                <button
-                  aria-label="Добавить проверку"
-                  className="ghost-button compact-button token-modal-icon-button"
-                  data-tooltip="Добавить проверку"
-                  onClick={addCheckClueEntry}
-                  type="button"
-                >
-                  <i aria-hidden="true" className="fa-solid fa-plus" />
-                </button>
-              ) : null}
               <button
                 aria-label="Закрыть редактор сцены"
                 className="ghost-button compact-button token-modal-icon-button"

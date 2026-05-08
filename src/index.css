@@ -881,6 +881,43 @@ textarea:focus {
   -webkit-text-stroke: 0;
 }
 
+.scene-editor-panel-title-row .scene-editor-title-add-button.token-modal-icon-button {
+  width: 34px;
+  min-width: 34px;
+  height: 34px;
+  min-height: 34px;
+  display: inline-grid;
+  place-items: center;
+  padding: 0;
+  border: 1px solid rgba(58, 43, 31, 0.14);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.68);
+  color: #8f4a2b;
+  box-shadow: none;
+}
+
+.scene-editor-panel-title-row .scene-editor-title-add-button.token-modal-icon-button:hover,
+.scene-editor-panel-title-row .scene-editor-title-add-button.token-modal-icon-button:focus-visible {
+  border-color: rgba(198, 95, 63, 0.32);
+  background: rgba(255, 255, 255, 0.94);
+  color: var(--ember);
+  transform: translateY(-1px);
+}
+
+.scene-editor-panel-title-row .scene-editor-checks-add-button.token-modal-icon-button {
+  border: 0;
+  background: transparent;
+  color: #3a2b1f;
+}
+
+.scene-editor-panel-title-row .scene-editor-checks-add-button.token-modal-icon-button:hover,
+.scene-editor-panel-title-row .scene-editor-checks-add-button.token-modal-icon-button:focus-visible {
+  border: 0;
+  background: transparent;
+  color: #8f4a2b;
+  transform: translateY(-1px);
+}
+
 .scene-editor-panel-title-actions {
   display: inline-flex;
   align-items: center;
