@@ -148,7 +148,6 @@ export function PlayerWindow() {
     session.playerDisplay.mode,
     session.playerDisplay.sceneId ?? 'none',
     session.playerDisplay.activeHandoutId ?? 'none',
-    session.playerDisplay.updatedAt,
   ].join(':')
 
   if (session.playerDisplay.mode === 'handout' && handout) {
