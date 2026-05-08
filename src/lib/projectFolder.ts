@@ -358,6 +358,17 @@ async function persistProjectAssets(
         )) ?? character.avatarSrc
     }
 
+    for (const token of adventure.playerTokens ?? []) {
+      token.imageSrc =
+        (await persistAssetUrl(
+          context,
+          token.imageSrc,
+          `${adventureFolderPath}/characters/${sanitizePathSegment(token.linkedCharacterId ?? token.id)}/token`,
+          token.imageSrc?.startsWith('data:image/svg+xml') ? 'image/svg+xml' : 'image/webp',
+          token.imageSrc?.startsWith('data:image/svg+xml') ? `${token.id}.svg` : `${token.id}.webp`,
+        )) ?? token.imageSrc
+    }
+
     for (const monster of adventure.monsterLibrary ?? []) {
       monster.imageSrc =
         (await persistAssetUrl(
@@ -603,6 +614,10 @@ async function resolveProjectAssets(
     for (const character of adventure.characters ?? []) {
       character.avatarSrc =
         (await resolveAssetPath(context, character.avatarSrc)) ?? character.avatarSrc
+    }
+
+    for (const token of adventure.playerTokens ?? []) {
+      token.imageSrc = (await resolveAssetPath(context, token.imageSrc)) ?? token.imageSrc
     }
 
     for (const monster of adventure.monsterLibrary ?? []) {

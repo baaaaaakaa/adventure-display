@@ -1019,6 +1019,7 @@ export function TokenModal({
   const isPlayerToken = token.kind === 'player'
   const isNpcToken = token.kind === 'npc'
   const isMonsterLibraryToken = isMonsterToken || isNpcToken
+  const canRemoveToken = !(isPlayerToken && token.linkedCharacterId)
   const monsterCardLabel = 'Открыть монстра'
   const selectedCondition = selectedConditionId ? conditionById.get(selectedConditionId) ?? null : null
 
@@ -1110,6 +1111,7 @@ export function TokenModal({
               <label className="field">
                 <span>Тип</span>
                 <StyledSelect
+                  disabled={Boolean(token.linkedCharacterId)}
                   onChange={(event) => updateTokenKind(event.target.value as TokenKind)}
                   value={token.kind}
                 >
@@ -1153,6 +1155,7 @@ export function TokenModal({
               <label className="field">
                 <span>Связанный персонаж</span>
                 <StyledSelect
+                  disabled={Boolean(token.linkedCharacterId)}
                   onChange={(event) => updateLinkedCharacter(event.target.value)}
                   value={token.linkedCharacterId ?? ''}
                 >
@@ -1218,15 +1221,17 @@ export function TokenModal({
               </button>
             ) : null}
             <TokenLayerControls token={token} onUpdateToken={onUpdateToken} />
-            <button
+            {canRemoveToken ? (
+              <button
               aria-label="Удалить фишку"
               className="ghost-button compact-button token-modal-icon-button"
               onClick={() => onRemoveToken(token.id)}
               title="Удалить фишку"
               type="button"
             >
-              <i aria-hidden="true" className="fa-solid fa-trash" />
-            </button>
+                <i aria-hidden="true" className="fa-solid fa-trash" />
+              </button>
+            ) : null}
           </div>
         </div>
       </div>

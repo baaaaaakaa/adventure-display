@@ -137,7 +137,7 @@ export function PlayerWindow() {
   const playerFogClipId = `player-fog-clip-${scene.id.replace(/[^a-zA-Z0-9_-]/g, '-')}`
   const hasPlayerFog = fogCellRects.length > 0 || hiddenFogZoneRects.length > 0
   const playerVisibleZones = scene.zones.filter((zone) => zone.visibleToPlayers)
-  const orderedTokens = [...(sceneRuntime?.tokens ?? [])]
+  const orderedTokens = [...(sceneRuntime?.tokens ?? []), ...(adventure.playerTokens ?? [])]
     .filter((token) => !token.hiddenFromPlayers)
     .sort((left, right) => left.zIndex - right.zIndex)
   const activeInitiativeToken =

@@ -6,6 +6,7 @@ import type {
   MapLayerInstance,
   MapViewport,
   MonsterBlock,
+  PlayerCharacter,
   ProjectState,
   SceneRuntimeState,
   ServiceMarker,
@@ -242,6 +243,28 @@ function normalizeAdventure(adventure: Adventure): Adventure {
   const repairedAdventure = repairStringFields(adventure)
   const monsterLibrary = collectAdventureMonsterLibrary(repairedAdventure)
   const adventureMonsterIds = new Set(monsterLibrary.map((monster) => monster.id))
+  const characters = (repairedAdventure.characters ?? []).map((character) => ({
+    ...character,
+    avatarAssetId: character.avatarAssetId ?? null,
+    avatarSrc: character.avatarSrc ?? null,
+    source: character.source ?? '',
+    importedAt: character.importedAt ?? new Date().toISOString(),
+    attacksAndSpellsText: character.attacksAndSpellsText ?? '',
+    attackFeaturesText: character.attackFeaturesText ?? '',
+    otherProficienciesAndLanguages: character.otherProficienciesAndLanguages ?? '',
+    spellcasting: {
+      ...character.spellcasting,
+      slots: character.spellcasting?.slots ?? [],
+      knownSpells: character.spellcasting?.knownSpells ?? [],
+      spells: character.spellcasting?.spells ?? [],
+    },
+  }))
+  const playerTokens = normalizeAdventurePlayerTokens(
+    characters,
+    Array.isArray((repairedAdventure as Adventure & { playerTokens?: TokenInstance[] }).playerTokens)
+      ? (repairedAdventure as Adventure & { playerTokens?: TokenInstance[] }).playerTokens
+      : [],
+  )
 
   return {
     ...repairedAdventure,
@@ -251,22 +274,8 @@ function normalizeAdventure(adventure: Adventure): Adventure {
       assetId: track.assetId ?? null,
       src: track.src ?? '',
     })),
-    characters: (repairedAdventure.characters ?? []).map((character) => ({
-      ...character,
-      avatarAssetId: character.avatarAssetId ?? null,
-      avatarSrc: character.avatarSrc ?? null,
-      source: character.source ?? '',
-      importedAt: character.importedAt ?? new Date().toISOString(),
-      attacksAndSpellsText: character.attacksAndSpellsText ?? '',
-      attackFeaturesText: character.attackFeaturesText ?? '',
-      otherProficienciesAndLanguages: character.otherProficienciesAndLanguages ?? '',
-      spellcasting: {
-        ...character.spellcasting,
-        slots: character.spellcasting?.slots ?? [],
-        knownSpells: character.spellcasting?.knownSpells ?? [],
-        spells: character.spellcasting?.spells ?? [],
-      },
-    })),
+    characters,
+    playerTokens,
     scenes: (repairedAdventure.scenes ?? []).map((scene) => {
       const rawMonsterIds = Array.isArray((scene as AdventureScene & { monsterIds?: string[] }).monsterIds)
         ? (scene as AdventureScene & { monsterIds?: string[] }).monsterIds
@@ -402,6 +411,97 @@ function normalizeTokenSpace(token: Partial<TokenInstance> & { size?: number }) 
   return 'medium'
 }
 
+function createFallbackCharacterImage(name: string) {
+  const initial = (name.trim()[0] ?? '?').toUpperCase()
+  const svg = `
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+      <rect width="128" height="128" rx="64" fill="#2f271f"/>
+      <circle cx="64" cy="46" r="24" fill="#d9c7a8"/>
+      <path d="M24 112c7-27 23-42 40-42s33 15 40 42" fill="#8f6a44"/>
+      <text x="64" y="73" text-anchor="middle" font-family="Arial, sans-serif" font-size="42" font-weight="700" fill="#241b14">${initial}</text>
+    </svg>
+  `
+
+  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`
+}
+
+function normalizeTokenNumbers(token: Partial<TokenInstance>, index: number) {
+  return {
+    x: typeof token.x === 'number' && Number.isFinite(token.x) ? token.x : 50,
+    y: typeof token.y === 'number' && Number.isFinite(token.y) ? token.y : 50,
+    rotation: typeof token.rotation === 'number' && Number.isFinite(token.rotation) ? token.rotation : 0,
+    hitPointsCurrent:
+      typeof token.hitPointsCurrent === 'number' ? token.hitPointsCurrent : null,
+    hitPointsMax: typeof token.hitPointsMax === 'number' ? token.hitPointsMax : null,
+    hitPointsTemp: typeof token.hitPointsTemp === 'number' ? token.hitPointsTemp : null,
+    initiative: typeof token.initiative === 'number' ? token.initiative : null,
+    zIndex: typeof token.zIndex === 'number' && Number.isFinite(token.zIndex) ? token.zIndex : 10 + index,
+  }
+}
+
+export function createPlayerTokenForCharacter(
+  character: PlayerCharacter,
+  index = 0,
+  existingToken?: Partial<TokenInstance> | null,
+): TokenInstance {
+  const numbers = normalizeTokenNumbers(existingToken ?? {}, index)
+  const hitPointsMax = numbers.hitPointsMax ?? character.hpMax
+  const hitPointsCurrent =
+    numbers.hitPointsCurrent ?? character.hpCurrent ?? hitPointsMax
+
+  return {
+    id: existingToken?.id || `player-token-${character.id}`,
+    name: character.name || existingToken?.name || 'Персонаж',
+    kind: 'player',
+    linkedMonsterId: null,
+    linkedCharacterId: character.id,
+    groupLabel: null,
+    imageSrc:
+      character.avatarSrc ||
+      existingToken?.imageSrc ||
+      createFallbackCharacterImage(character.name),
+    x: numbers.x,
+    y: numbers.y,
+    space: normalizeTokenSpace(existingToken ?? {}),
+    rotation: numbers.rotation,
+    hiddenFromPlayers: existingToken?.hiddenFromPlayers ?? false,
+    hitPointsCurrent,
+    hitPointsMax,
+    hitPointsTemp: numbers.hitPointsTemp,
+    initiative: numbers.initiative ?? character.initiative,
+    conditions: existingToken?.conditions ?? character.conditions ?? [],
+    zIndex: numbers.zIndex,
+  }
+}
+
+function normalizeAdventurePlayerTokens(
+  characters: PlayerCharacter[],
+  candidateTokens: Partial<TokenInstance>[],
+) {
+  return characters.map((character, index) => {
+    const existingToken =
+      candidateTokens.find((token) => token.linkedCharacterId === character.id) ??
+      candidateTokens.find((token) => token.id === `player-token-${character.id}`) ??
+      null
+
+    return createPlayerTokenForCharacter(character, index, existingToken)
+  })
+}
+
+function isSceneBoundToken(token: TokenInstance) {
+  return token.kind !== 'player' && !token.linkedCharacterId
+}
+
+function collectScenePlayerTokens(session?: SessionState | null) {
+  if (!session) {
+    return []
+  }
+
+  return Object.values(session.sceneStates ?? {}).flatMap((sceneState) =>
+    (sceneState.tokens ?? []).filter((token) => !isSceneBoundToken(token)),
+  )
+}
+
 function syncSceneRuntimeStateWithScene(
   scene: AdventureScene,
   currentSceneState?: SceneRuntimeState,
@@ -457,7 +557,9 @@ function syncSceneRuntimeStateWithScene(
     isActive: activeLayerIndex >= 0 ? index === activeLayerIndex : index === 0,
   }))
 
-  const normalizedTokens: TokenInstance[] = (nextState.tokens ?? []).map(
+  const normalizedTokens: TokenInstance[] = (nextState.tokens ?? [])
+    .filter(isSceneBoundToken)
+    .map(
     (token, index) => ({
       ...token,
       linkedMonsterId:
@@ -474,6 +576,7 @@ function syncSceneRuntimeStateWithScene(
       hitPointsMax: typeof token.hitPointsMax === 'number' ? token.hitPointsMax : null,
       hitPointsTemp: typeof token.hitPointsTemp === 'number' ? token.hitPointsTemp : null,
       initiative: typeof token.initiative === 'number' ? token.initiative : null,
+      conditions: token.conditions ?? [],
       zIndex: token.zIndex ?? 10 + index,
     }),
   )
@@ -602,6 +705,22 @@ export function syncSessionStateWithAdventure(
   }
 }
 
+function syncAdventurePlayerTokens(
+  adventure: Adventure,
+  currentSession?: SessionState | null,
+): Adventure {
+  const scenePlayerTokens = collectScenePlayerTokens(currentSession)
+  const playerTokens = normalizeAdventurePlayerTokens(
+    adventure.characters,
+    [...scenePlayerTokens, ...(adventure.playerTokens ?? [])],
+  )
+
+  return {
+    ...adventure,
+    playerTokens,
+  }
+}
+
 function isLegacyProjectState(
   value: unknown,
 ): value is { adventure: Adventure; session: SessionState } {
@@ -626,24 +745,24 @@ export function syncProjectState(currentState: ProjectState): ProjectState {
       ? currentState.activeAdventureId
       : fallbackAdventureId
 
-  const sessions = Object.fromEntries(
-    adventureOrder.map((adventureId) => {
-      const adventure = normalizeAdventure(currentState.adventures[adventureId])
-      const session =
-        currentState.sessions[adventureId] ?? createInitialSessionState(adventure)
+  const normalizedEntries = adventureOrder.map((adventureId) => {
+    const normalizedAdventure = normalizeAdventure(currentState.adventures[adventureId])
+    const currentSession =
+      currentState.sessions[adventureId] ?? createInitialSessionState(normalizedAdventure)
+    const adventure = syncAdventurePlayerTokens(normalizedAdventure, currentSession)
+    const session = syncSessionStateWithAdventure(adventure, currentSession)
 
-      return [adventureId, syncSessionStateWithAdventure(adventure, session)]
-    }),
+    return [adventureId, adventure, session] as const
+  })
+  const sessions = Object.fromEntries(
+    normalizedEntries.map(([adventureId, , session]) => [adventureId, session]),
   )
 
   return {
     activeAdventureId,
     adventureOrder,
     adventures: Object.fromEntries(
-      adventureOrder.map((adventureId) => [
-        adventureId,
-        normalizeAdventure(currentState.adventures[adventureId]),
-      ]),
+      normalizedEntries.map(([adventureId, adventure]) => [adventureId, adventure]),
     ),
     sessions,
     monsterLibrary: Array.isArray(currentState.monsterLibrary)

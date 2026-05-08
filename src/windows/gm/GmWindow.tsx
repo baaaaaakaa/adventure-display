@@ -32,6 +32,7 @@ import { ZoneModal } from './ZoneModal'
 import {
   createInitialProjectState,
   createInitialSessionState,
+  createPlayerTokenForCharacter,
   getActiveAdventureBundle,
   playerDisplayChannelName,
   syncProjectState,
@@ -1161,6 +1162,7 @@ function normalizeImportedAdventure(raw: unknown): Adventure {
     assetLibrary,
     audioLibrary,
     characters: Array.isArray(raw.characters) ? (raw.characters as PlayerCharacter[]) : [],
+    playerTokens: Array.isArray(raw.playerTokens) ? (raw.playerTokens as TokenInstance[]) : [],
     monsterLibrary: Array.isArray(raw.monsterLibrary)
       ? (raw.monsterLibrary as MonsterBlock[])
       : scenes.flatMap((scene) => scene.monsterBlocks),
@@ -1245,6 +1247,7 @@ function createEmptyAdventure(adventureId: string): Adventure {
     assetLibrary: [],
     audioLibrary: [],
     characters: [],
+    playerTokens: [],
     monsterLibrary: [],
     scenes: [
       {
@@ -2175,6 +2178,7 @@ export function GmWindow() {
   const playerDisplayAssetCacheRef = useRef<Map<string, string>>(new Map())
   const playerDisplayBroadcastIdRef = useRef(0)
   const activeSceneStateRef = useRef<SceneRuntimeState | null>(null)
+  const activeMapTokensRef = useRef<TokenInstance[]>([])
   const activeBundle = getActiveAdventureBundle(projectState)
   const activeAdventureId = activeBundle?.adventureId ?? null
   const adventure = activeBundle?.adventure ?? null
@@ -2342,8 +2346,12 @@ export function GmWindow() {
       activeScene?.splash.imageSrc,
     )
     : null
+  const activeSceneTokens = activeSceneState?.tokens ?? []
+  const adventurePlayerTokens = adventure?.playerTokens ?? []
+  const activeMapTokens = [...activeSceneTokens, ...adventurePlayerTokens]
+  activeMapTokensRef.current = activeMapTokens
   const activeToken =
-    activeSceneState?.tokens.find((token) => token.id === selectedTokenId) ?? null
+    activeMapTokens.find((token) => token.id === selectedTokenId) ?? null
   const activeTokenLinkedMonster =
     activeToken?.linkedMonsterId
       ? sceneMonsters.find((monster) => monster.id === activeToken.linkedMonsterId) ?? null
@@ -2381,13 +2389,13 @@ export function GmWindow() {
       setIsZoneModalOpen(false)
     }
   }, [activeScene?.zones.length])
-  const orderedTokens = [...(activeSceneState?.tokens ?? [])].sort(
+  const orderedTokens = [...activeMapTokens].sort(
     (left, right) => left.zIndex - right.zIndex,
   )
-  const initiativeTokens = sortTokensByInitiative(activeSceneState?.tokens ?? [])
+  const initiativeTokens = sortTokensByInitiative(activeMapTokens)
   const activeInitiativeToken =
     activeSceneState?.activeInitiativeTokenId
-      ? activeSceneState.tokens.find(
+      ? activeMapTokens.find(
         (token) => token.id === activeSceneState.activeInitiativeTokenId,
       ) ?? null
       : null
@@ -2460,7 +2468,7 @@ export function GmWindow() {
       (layer) => layer.visibleToGm && layer.imageSrc,
     ) ?? []
   const recentProjectSnapshots = [...projectSnapshots].reverse().slice(0, 6)
-  const tokenTrackerEntries = [...activeSceneState.tokens].sort((leftToken, rightToken) => {
+  const tokenTrackerEntries = [...activeMapTokens].sort((leftToken, rightToken) => {
     if (leftToken.initiative == null && rightToken.initiative != null) {
       return 1
     }
@@ -2513,9 +2521,9 @@ export function GmWindow() {
       return
     }
     activeSceneStateRef.current = activeSceneState
-    // Drop token selection when the selected token is removed by scene edits.
+    // Drop token selection when the selected token is removed by scene/adventure edits.
     setSelectedTokenId((currentId) => {
-      if (currentId && activeSceneState.tokens.some((token) => token.id === currentId)) {
+      if (currentId && activeMapTokens.some((token) => token.id === currentId)) {
         return currentId
       }
       return null
@@ -2535,7 +2543,7 @@ export function GmWindow() {
       }
       return null
     })
-  }, [activeSceneState])
+  }, [activeSceneState, adventurePlayerTokens])
   useEffect(() => {
     if (!activeScene) {
       return
@@ -3314,6 +3322,36 @@ export function GmWindow() {
   function pushTokenToScene(token: TokenInstance) {
     pushTokensToScene([token], `Добавлена фишка: ${token.name}`)
   }
+  function isAdventurePlayerToken(token: TokenInstance) {
+    return token.kind === 'player' && Boolean(token.linkedCharacterId)
+  }
+  function upsertAdventurePlayerToken(token: TokenInstance) {
+    if (!adventure) {
+      return
+    }
+    updateAdventure((currentAdventure) => {
+      const playerTokens = currentAdventure.playerTokens ?? []
+      const tokenIndex = playerTokens.findIndex(
+        (entry) =>
+          entry.id === token.id ||
+          (entry.linkedCharacterId && entry.linkedCharacterId === token.linkedCharacterId),
+      )
+      const nextToken = {
+        ...token,
+        kind: 'player' as const,
+        linkedMonsterId: null,
+        groupLabel: null,
+      }
+
+      return {
+        ...currentAdventure,
+        playerTokens:
+          tokenIndex >= 0
+            ? playerTokens.map((entry, index) => (index === tokenIndex ? nextToken : entry))
+            : [...playerTokens, nextToken],
+      }
+    }, `Обновлена фишка игрока: ${token.name}`)
+  }
   function buildTokenCopies(
     tokenFactory: (index: number) => TokenInstance,
     count: number,
@@ -3338,6 +3376,32 @@ export function GmWindow() {
     if (!activeScene) {
       return
     }
+    const adventurePlayerToken = adventure?.playerTokens.find((token) => token.id === tokenId) ?? null
+
+    if (adventurePlayerToken) {
+      upsertAdventurePlayerToken(updater(adventurePlayerToken))
+      return
+    }
+
+    const sceneToken = activeSceneState?.tokens.find((token) => token.id === tokenId) ?? null
+
+    if (sceneToken) {
+      const nextToken = updater(sceneToken)
+
+      if (isAdventurePlayerToken(nextToken)) {
+        upsertAdventurePlayerToken(nextToken)
+        updateSceneRuntimeState(activeScene.id, (sceneState) => ({
+          ...sceneState,
+          tokens: sceneState.tokens.filter((token) => token.id !== tokenId),
+          activeInitiativeTokenId:
+            sceneState.activeInitiativeTokenId === tokenId
+              ? nextToken.id
+              : sceneState.activeInitiativeTokenId,
+        }))
+        return
+      }
+    }
+
     updateSceneRuntimeState(activeScene.id, (sceneState) => ({
       ...sceneState,
       tokens: sceneState.tokens.map((token) =>
@@ -3439,6 +3503,22 @@ export function GmWindow() {
   }
   function removeToken(tokenId: string) {
     if (!activeScene) {
+      return
+    }
+    if (adventure?.playerTokens.some((token) => token.id === tokenId)) {
+      updateAdventure((currentAdventure) => ({
+        ...currentAdventure,
+        playerTokens: (currentAdventure.playerTokens ?? []).filter((token) => token.id !== tokenId),
+      }), 'Удалена фишка игрока')
+      if (selectedTokenId === tokenId) {
+        setIsTokenModalOpen(false)
+      }
+      setSelectedTokenId((currentId) => (currentId === tokenId ? null : currentId))
+      setActiveInitiativeToken(
+        activeSceneState?.activeInitiativeTokenId === tokenId
+          ? null
+          : (activeSceneState?.activeInitiativeTokenId ?? null),
+      )
       return
     }
     updateSceneRuntimeState(activeScene.id, (sceneState) => ({
@@ -3790,6 +3870,14 @@ export function GmWindow() {
       clientY,
       activeMapViewport,
     )
+    const isPlayerAdventureToken = Boolean(adventure?.playerTokens.some((token) => token.id === tokenId))
+    if (isPlayerAdventureToken) {
+      updateToken(tokenId, (token) => ({
+        ...token,
+        x,
+        y,
+      }))
+    }
     const currentFogCells = activeSceneStateRef.current?.fogCells ?? []
     const currentHiddenZoneIds = activeSceneStateRef.current?.hiddenZoneIds ?? []
     const autoRevealZones = activeScene.zones.filter(
@@ -3820,7 +3908,7 @@ export function GmWindow() {
         return {
           ...sceneState,
           tokens: sceneState.tokens.map((token) =>
-            token.id === tokenId ? { ...token, x, y } : token,
+            !isPlayerAdventureToken && token.id === tokenId ? { ...token, x, y } : token,
           ),
           fogCells:
             fogToReveal.size > 0
@@ -3839,7 +3927,7 @@ export function GmWindow() {
   }
   function getTokenPointerAngle(tokenId: string, clientX: number, clientY: number) {
     const mapBoard = mapFrameRef.current
-    const token = activeSceneStateRef.current?.tokens.find((entry) => entry.id === tokenId)
+    const token = activeMapTokensRef.current.find((entry) => entry.id === tokenId)
     if (!mapBoard || !token) {
       return null
     }
@@ -3907,7 +3995,7 @@ export function GmWindow() {
       if (!pointerPosition) {
         return
       }
-      const token = activeSceneStateRef.current?.tokens.find((entry) => entry.id === tokenId)
+      const token = activeMapTokensRef.current.find((entry) => entry.id === tokenId)
       const angle = getTokenPointerAngle(tokenId, pointerPosition.x, pointerPosition.y)
       if (!token || angle == null) {
         return
@@ -4320,6 +4408,16 @@ export function GmWindow() {
             currentCharacter.id === targetCharacter.id ? character : currentCharacter,
           )
           : [...(currentAdventure.characters ?? []), character],
+        playerTokens: targetCharacter
+          ? (currentAdventure.playerTokens ?? []).map((token, index) =>
+            token.linkedCharacterId === targetCharacter.id
+              ? createPlayerTokenForCharacter(character, index, token)
+              : token,
+          )
+          : [
+              ...(currentAdventure.playerTokens ?? []),
+              createPlayerTokenForCharacter(character, currentAdventure.playerTokens?.length ?? 0),
+            ],
       }), targetCharacter ? `Обновлен персонаж: ${character.name}` : `Импортирован персонаж: ${character.name}`)
       setSelectedCharacterId(character.id)
       setIsCharacterModalOpen(true)
@@ -4348,6 +4446,9 @@ export function GmWindow() {
       ...currentAdventure,
       characters: (currentAdventure.characters ?? []).filter(
         (character) => character.id !== characterId,
+      ),
+      playerTokens: (currentAdventure.playerTokens ?? []).filter(
+        (token) => token.linkedCharacterId !== characterId,
       ),
     }), `Удален персонаж: ${characterName}`)
     if (selectedCharacterId === characterId) {

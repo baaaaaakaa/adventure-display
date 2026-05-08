@@ -293,6 +293,7 @@ export interface Adventure {
   assetLibrary: AssetRecord[]
   audioLibrary: AudioTrack[]
   characters: PlayerCharacter[]
+  playerTokens: TokenInstance[]
   monsterLibrary: MonsterBlock[]
   scenes: AdventureScene[]
 }

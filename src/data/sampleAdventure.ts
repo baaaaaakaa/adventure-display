@@ -20,6 +20,7 @@ export const sampleAdventure: Adventure = {
     },
   ],
   characters: [],
+  playerTokens: [],
   monsterLibrary: [],
   scenes: [
     {
