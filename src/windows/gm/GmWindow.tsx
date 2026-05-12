@@ -4028,17 +4028,10 @@ export function GmWindow() {
     window.addEventListener('pointermove', handleMove)
     window.addEventListener('pointerup', handleUp)
   }
-  function moveToken(tokenId: string, clientX: number, clientY: number) {
-    const mapBoard = mapFrameRef.current
-    if (!mapBoard || !activeScene) {
+  function moveTokenToPosition(tokenId: string, x: number, y: number) {
+    if (!activeScene) {
       return
     }
-    const { x, y } = resolveMapBoardPosition(
-      mapBoard,
-      clientX,
-      clientY,
-      activeMapViewport,
-    )
     const isPlayerAdventureToken = Boolean(adventure?.playerTokens.some((token) => token.id === tokenId))
     if (isPlayerAdventureToken) {
       updateToken(tokenId, (token) => ({
@@ -4094,6 +4087,39 @@ export function GmWindow() {
         : 'Перемещена фишка',
     )
   }
+  function moveToken(tokenId: string, clientX: number, clientY: number) {
+    const mapBoard = mapFrameRef.current
+    if (!mapBoard || !activeScene) {
+      return
+    }
+    const { x, y } = resolveMapBoardPosition(
+      mapBoard,
+      clientX,
+      clientY,
+      activeMapViewport,
+    )
+    moveTokenToPosition(tokenId, x, y)
+  }
+  function getDraggedTokenPosition(
+    token: TokenInstance,
+    startClientX: number,
+    startClientY: number,
+    clientX: number,
+    clientY: number,
+  ): MapPoint | null {
+    const mapBoard = mapFrameRef.current
+    if (!mapBoard || !activeScene) {
+      return null
+    }
+    const rect = mapBoard.getBoundingClientRect()
+    const scale = activeMapViewport.scale || 1
+    const deltaX = ((clientX - startClientX) / (rect.width * scale)) * 100
+    const deltaY = ((clientY - startClientY) / (rect.height * scale)) * 100
+    return {
+      x: clampZoneCoordinate(token.x + deltaX, token.x),
+      y: clampZoneCoordinate(token.y + deltaY, token.y),
+    }
+  }
   function getTokenPointerAngle(tokenId: string, clientX: number, clientY: number) {
     const mapBoard = mapFrameRef.current
     const token = activeMapTokensRef.current.find((entry) => entry.id === tokenId)
@@ -4140,7 +4166,11 @@ export function GmWindow() {
     }
     event.preventDefault()
     event.stopPropagation()
-    event.currentTarget.setPointerCapture?.(event.pointerId)
+    try {
+      event.currentTarget.setPointerCapture?.(event.pointerId)
+    } catch {
+      // Synthetic pointer events used in tests may not have an active capture target.
+    }
     tokenDragStartRef.current = {
       x: event.clientX,
       y: event.clientY,
@@ -4156,6 +4186,7 @@ export function GmWindow() {
     if (tokenRotateHoldTimerRef.current) {
       clearTimeout(tokenRotateHoldTimerRef.current)
     }
+    const dragStartToken = activeMapTokensRef.current.find((entry) => entry.id === tokenId) ?? null
     tokenRotateHoldTimerRef.current = setTimeout(() => {
       const pointerPosition = tokenPointerPositionRef.current
       if (!pointerPosition) {
@@ -4208,7 +4239,20 @@ export function GmWindow() {
         return
       }
       if (suppressTokenClickRef.current) {
-        moveToken(tokenId, moveEvent.clientX, moveEvent.clientY)
+        const nextPosition = dragStartToken
+          ? getDraggedTokenPosition(
+            dragStartToken,
+            tokenDragStartRef.current?.x ?? event.clientX,
+            tokenDragStartRef.current?.y ?? event.clientY,
+            moveEvent.clientX,
+            moveEvent.clientY,
+          )
+          : null
+        if (nextPosition) {
+          moveTokenToPosition(tokenId, nextPosition.x, nextPosition.y)
+        } else {
+          moveToken(tokenId, moveEvent.clientX, moveEvent.clientY)
+        }
       }
     }
     const handleUp = () => {
