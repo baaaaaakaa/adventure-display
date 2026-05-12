@@ -2001,6 +2001,11 @@ export function GmWindow() {
     tokenElement: HTMLElement
     tokenId: string
   } | null>(null)
+  const tokenRotationDraftRef = useRef<{
+    rotation: number
+    tokenElement: HTMLElement
+    tokenId: string
+  } | null>(null)
   const suppressTokenClickRef = useRef(false)
   const serviceMarkerDragStartRef = useRef<{ x: number; y: number } | null>(null)
   const serviceMarkerInteractionDraftRef = useRef<{
@@ -4174,6 +4179,32 @@ export function GmWindow() {
     }
     moveTokenToPosition(tokenId, draft.position.x, draft.position.y)
   }
+  function applyTokenRotationDraftStyle(tokenElement: HTMLElement, rotation: number) {
+    tokenElement.style.transform = `translate(-50%, -50%) rotate(${rotation}deg)`
+  }
+  function setTokenRotationDraft(
+    tokenElement: HTMLElement,
+    tokenId: string,
+    rotation: number,
+  ) {
+    tokenRotationDraftRef.current = {
+      rotation,
+      tokenElement,
+      tokenId,
+    }
+    applyTokenRotationDraftStyle(tokenElement, rotation)
+  }
+  function commitTokenRotationDraft(tokenId: string) {
+    const draft = tokenRotationDraftRef.current
+    tokenRotationDraftRef.current = null
+    if (!draft || draft.tokenId !== tokenId) {
+      return
+    }
+    updateToken(tokenId, (token) => ({
+      ...token,
+      rotation: draft.rotation,
+    }))
+  }
   function getTokenPointerAngle(tokenId: string, clientX: number, clientY: number) {
     const mapBoard = mapFrameRef.current
     const token = activeMapTokensRef.current.find((entry) => entry.id === tokenId)
@@ -4208,6 +4239,7 @@ export function GmWindow() {
     tokenDragStartRef.current = null
     tokenPointerPositionRef.current = null
     tokenInteractionDraftRef.current = null
+    tokenRotationDraftRef.current = null
     tokenInteractionModeRef.current = 'move'
     tokenRotationGestureRef.current = null
     setRotatingTokenId(null)
@@ -4288,10 +4320,11 @@ export function GmWindow() {
         if (!rotationGesture || angle == null) {
           return
         }
-        updateToken(rotationGesture.tokenId, (token) => ({
-          ...token,
-          rotation: normalizeRotationDegrees(angle + rotationGesture.angleOffset),
-        }))
+        setTokenRotationDraft(
+          tokenElement,
+          rotationGesture.tokenId,
+          normalizeRotationDegrees(angle + rotationGesture.angleOffset),
+        )
         return
       }
       if (suppressTokenClickRef.current) {
@@ -4315,6 +4348,7 @@ export function GmWindow() {
       window.removeEventListener('pointermove', handleMove)
       window.removeEventListener('pointerup', handleUp)
       commitTokenInteractionDraft(tokenId)
+      commitTokenRotationDraft(tokenId)
       clearTokenInteractionState()
     }
     window.addEventListener('pointermove', handleMove)
