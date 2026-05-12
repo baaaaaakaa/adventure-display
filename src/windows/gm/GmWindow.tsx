@@ -1996,6 +1996,11 @@ export function GmWindow() {
   const tokenRotateHoldTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const tokenInteractionModeRef = useRef<'move' | 'rotate'>('move')
   const tokenRotationGestureRef = useRef<{ tokenId: string; angleOffset: number } | null>(null)
+  const tokenInteractionDraftRef = useRef<{
+    position: MapPoint
+    tokenElement: HTMLElement
+    tokenId: string
+  } | null>(null)
   const suppressTokenClickRef = useRef(false)
   const serviceMarkerDragStartRef = useRef<{ x: number; y: number } | null>(null)
   const serviceMarkerInteractionDraftRef = useRef<{
@@ -4145,6 +4150,30 @@ export function GmWindow() {
       y: clampZoneCoordinate(token.y + deltaY, token.y),
     }
   }
+  function applyTokenDraftStyle(tokenElement: HTMLElement, position: MapPoint) {
+    tokenElement.style.left = `${position.x}%`
+    tokenElement.style.top = `${position.y}%`
+  }
+  function setTokenInteractionDraft(
+    tokenElement: HTMLElement,
+    tokenId: string,
+    position: MapPoint,
+  ) {
+    tokenInteractionDraftRef.current = {
+      position,
+      tokenElement,
+      tokenId,
+    }
+    applyTokenDraftStyle(tokenElement, position)
+  }
+  function commitTokenInteractionDraft(tokenId: string) {
+    const draft = tokenInteractionDraftRef.current
+    tokenInteractionDraftRef.current = null
+    if (!draft || draft.tokenId !== tokenId) {
+      return
+    }
+    moveTokenToPosition(tokenId, draft.position.x, draft.position.y)
+  }
   function getTokenPointerAngle(tokenId: string, clientX: number, clientY: number) {
     const mapBoard = mapFrameRef.current
     const token = activeMapTokensRef.current.find((entry) => entry.id === tokenId)
@@ -4178,6 +4207,7 @@ export function GmWindow() {
     }
     tokenDragStartRef.current = null
     tokenPointerPositionRef.current = null
+    tokenInteractionDraftRef.current = null
     tokenInteractionModeRef.current = 'move'
     tokenRotationGestureRef.current = null
     setRotatingTokenId(null)
@@ -4191,8 +4221,9 @@ export function GmWindow() {
     }
     event.preventDefault()
     event.stopPropagation()
+    const tokenElement = event.currentTarget
     try {
-      event.currentTarget.setPointerCapture?.(event.pointerId)
+      tokenElement.setPointerCapture?.(event.pointerId)
     } catch {
       // Synthetic pointer events used in tests may not have an active capture target.
     }
@@ -4274,7 +4305,7 @@ export function GmWindow() {
           )
           : null
         if (nextPosition) {
-          moveTokenToPosition(tokenId, nextPosition.x, nextPosition.y)
+          setTokenInteractionDraft(tokenElement, tokenId, nextPosition)
         } else {
           moveToken(tokenId, moveEvent.clientX, moveEvent.clientY)
         }
@@ -4283,6 +4314,7 @@ export function GmWindow() {
     const handleUp = () => {
       window.removeEventListener('pointermove', handleMove)
       window.removeEventListener('pointerup', handleUp)
+      commitTokenInteractionDraft(tokenId)
       clearTokenInteractionState()
     }
     window.addEventListener('pointermove', handleMove)
