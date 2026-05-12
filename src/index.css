@@ -3632,10 +3632,14 @@ textarea:focus {
 .service-marker-note-modal {
   position: relative;
   width: min(560px, calc(100vw - 36px));
+  max-height: min(82vh, 760px);
   display: grid;
   gap: 12px;
+  overflow: auto;
   padding: clamp(24px, 4vw, 42px);
   background: rgba(248, 240, 226, 0.9);
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
 }
 
 .service-marker-note-modal h2,
@@ -3654,6 +3658,7 @@ textarea:focus {
   font-size: 1.02rem;
   line-height: 1.55;
   white-space: pre-wrap;
+  padding-right: 6px;
 }
 
 .service-marker-note-close {
