@@ -37,6 +37,15 @@
   align-content: start;
 }
 
+.linkedList {
+  min-height: 0;
+  display: grid;
+  gap: 10px;
+  overflow: auto;
+  padding: 0 var(--modal-content-inset) 4px;
+  scrollbar-gutter: stable;
+}
+
 .linkedCard {
   display: grid;
   gap: 12px;

@@ -6,7 +6,7 @@ type ChecksEditorPanelProps = {
   abilityOptions: readonly string[]
   difficultyOptions: readonly string[]
   entries: CheckClueEntry[]
-  linkedPreviewEntry: CheckClueEntry | null
+  linkedPreviewEntries: CheckClueEntry[]
   onAddEntry: () => void
   onRemoveEntry: (entryId: string) => void
   onUpdateEntry: (entryId: string, updater: (entry: CheckClueEntry) => CheckClueEntry) => void
@@ -16,7 +16,7 @@ export function ChecksEditorPanel({
   abilityOptions,
   difficultyOptions,
   entries,
-  linkedPreviewEntry,
+  linkedPreviewEntries,
   onAddEntry,
   onRemoveEntry,
   onUpdateEntry,
@@ -36,14 +36,18 @@ export function ChecksEditorPanel({
         </button>
       </div>
 
-      {linkedPreviewEntry ? (
-        <article className={styles.linkedCard}>
-          <div className={styles.linkedCardMeta}>
-            <span>{linkedPreviewEntry.ability || 'Без характеристики'}</span>
-            <strong>{linkedPreviewEntry.difficulty || 'Без сложности'}</strong>
-          </div>
-          <p>{linkedPreviewEntry.outcome || 'Итог проверки не заполнен.'}</p>
-        </article>
+      {linkedPreviewEntries.length > 0 ? (
+        <div className={styles.linkedList}>
+          {linkedPreviewEntries.map((linkedPreviewEntry) => (
+            <article className={styles.linkedCard} key={linkedPreviewEntry.id}>
+              <div className={styles.linkedCardMeta}>
+                <span>{linkedPreviewEntry.ability || 'Без характеристики'}</span>
+                <strong>{linkedPreviewEntry.difficulty || 'Без сложности'}</strong>
+              </div>
+              <p>{linkedPreviewEntry.outcome || 'Итог проверки не заполнен.'}</p>
+            </article>
+          ))}
+        </div>
       ) : entries.length > 0 ? (
         <div className={styles.table}>
           <div className={`${styles.row} ${styles.headerRow}`}>

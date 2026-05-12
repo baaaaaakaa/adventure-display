@@ -1924,7 +1924,7 @@ export function GmWindow() {
     () => sampleAdventure.scenes[0]?.id ?? '',
   )
   const [selectedHandoutId, setSelectedHandoutId] = useState<string | null>(null)
-  const [linkedCheckPreviewId, setLinkedCheckPreviewId] = useState<string | null>(null)
+  const [linkedCheckPreviewIds, setLinkedCheckPreviewIds] = useState<string[]>([])
   const [selectedMonsterId, setSelectedMonsterId] = useState<string | null>(null)
   const [selectedCharacterId, setSelectedCharacterId] = useState<string | null>(null)
   const [isCharacterModalOpen, setIsCharacterModalOpen] = useState(false)
@@ -2185,7 +2185,7 @@ export function GmWindow() {
     }
   }, [isSceneEditorModalOpen])
   function openSceneEditorSection(tabId: EditorTab) {
-    setLinkedCheckPreviewId(null)
+    setLinkedCheckPreviewIds([])
     setActiveEditorTab(tabId)
     setIsSceneEditorModalOpen(true)
     setIsSceneEditorActionsOpen(false)
@@ -2327,8 +2327,9 @@ export function GmWindow() {
     () => new Map(sceneMonsters.map((monster) => [monster.id, monster])),
     [sceneMonsters],
   )
-  const linkedCheckPreviewEntry =
-    activeScene?.checksClues.find((entry) => entry.id === linkedCheckPreviewId) ?? null
+  const linkedCheckPreviewEntries =
+    activeScene?.checksClues.filter((entry) => linkedCheckPreviewIds.includes(entry.id)) ?? []
+  const hasLinkedCheckPreview = linkedCheckPreviewEntries.length > 0
   const resolvedSelectedHandoutId = activeScene?.handouts.some(
     (handout) => handout.id === selectedHandoutId,
   )
@@ -3265,17 +3266,21 @@ export function GmWindow() {
   function showZoneLinkedHandoutToPlayers(zone: MapZone) {
     showLinkedHandoutToPlayers(zone.linkedHandoutId)
   }
-  function focusLinkedCheck(checkId: string | null | undefined) {
-    if (
-      !checkId ||
-      !activeScene?.checksClues.some((entry) => entry.id === checkId)
-    ) {
+  function focusLinkedChecks(checkIds: string[]) {
+    const safeCheckIds = checkIds.filter((checkId) =>
+      activeScene?.checksClues.some((entry) => entry.id === checkId),
+    )
+
+    if (safeCheckIds.length === 0) {
       return
     }
-    setLinkedCheckPreviewId(checkId)
+    setLinkedCheckPreviewIds(safeCheckIds)
     setActiveEditorTab('checks')
     setIsSceneEditorModalOpen(true)
     setIsSceneEditorActionsOpen(false)
+  }
+  function focusLinkedCheck(checkId: string | null | undefined) {
+    focusLinkedChecks(checkId ? [checkId] : [])
   }
   function getServiceMarkerLinkedCheckIds(marker: ServiceMarker) {
     return Array.from(
@@ -3286,7 +3291,7 @@ export function GmWindow() {
     ).filter((checkId) => activeScene?.checksClues.some((entry) => entry.id === checkId))
   }
   function focusServiceMarkerLinkedChecks(marker: ServiceMarker) {
-    focusLinkedCheck(getServiceMarkerLinkedCheckIds(marker)[0] ?? null)
+    focusLinkedChecks(getServiceMarkerLinkedCheckIds(marker))
   }
   function focusZoneLinkedCheck(zone: MapZone) {
     focusLinkedCheck(zone.linkedCheckId)
@@ -7362,16 +7367,16 @@ export function GmWindow() {
           <aside
             aria-label="Редактор сцены"
             aria-modal
-            className={`panel status-panel editor-panel scene-editor-panel scene-editor-panel-${activeEditorTab} is-modal-open ${linkedCheckPreviewEntry ? 'is-linked-check-preview' : ''
+            className={`panel status-panel editor-panel scene-editor-panel scene-editor-panel-${activeEditorTab} is-modal-open ${hasLinkedCheckPreview ? 'is-linked-check-preview' : ''
               }`}
             role="dialog"
           >
             <div className="panel-header scene-editor-panel-header">
               <div className="scene-editor-panel-header-copy">
                 <span className="eyebrow">
-                  {linkedCheckPreviewEntry ? 'Связанная проверка' : 'Редактор сцены'}
+                  {hasLinkedCheckPreview ? 'Связанные проверки' : 'Редактор сцены'}
                 </span>
-                {!linkedCheckPreviewEntry ? (
+                {!hasLinkedCheckPreview ? (
                   <div className="scene-editor-panel-title-row">
                     <h2>
                       {activeEditorTab === 'scene'
@@ -7481,7 +7486,7 @@ export function GmWindow() {
                     aria-selected={activeEditorTab === tabId}
                     className={`tab-button ${activeEditorTab === tabId ? 'active' : ''}`}
                     onClick={() => {
-                      setLinkedCheckPreviewId(null)
+                      setLinkedCheckPreviewIds([])
                       setActiveEditorTab(tabId)
                     }}
                     role="tab"
@@ -7746,7 +7751,7 @@ export function GmWindow() {
                   abilityOptions={checkAbilityOptions}
                   difficultyOptions={checkDifficultyOptions}
                   entries={activeScene.checksClues}
-                  linkedPreviewEntry={linkedCheckPreviewEntry}
+                  linkedPreviewEntries={linkedCheckPreviewEntries}
                   onAddEntry={addCheckClueEntry}
                   onRemoveEntry={removeCheckClueEntry}
                   onUpdateEntry={updateCheckClueEntry}
