@@ -582,18 +582,25 @@ function syncSceneRuntimeStateWithScene(
   )
   const normalizedServiceMarkers: ServiceMarker[] = (
     nextState.serviceMarkers ?? []
-  ).map((marker, index) => ({
-    ...marker,
-    linkedHandoutId:
-      scene.handouts?.some((handout) => handout.id === marker.linkedHandoutId)
-        ? marker.linkedHandoutId
-        : null,
-    linkedCheckId:
-      scene.checksClues?.some((entry) => entry.id === marker.linkedCheckId)
-        ? marker.linkedCheckId
-        : null,
-    zIndex: marker.zIndex ?? 100 + index,
-  }))
+  ).map((marker, index) => {
+    const linkedCheckIds = Array.from(
+      new Set([
+        ...(marker.linkedCheckIds ?? []),
+        ...(marker.linkedCheckId ? [marker.linkedCheckId] : []),
+      ]),
+    ).filter((checkId) => scene.checksClues?.some((entry) => entry.id === checkId))
+
+    return {
+      ...marker,
+      linkedHandoutId:
+        scene.handouts?.some((handout) => handout.id === marker.linkedHandoutId)
+          ? marker.linkedHandoutId
+          : null,
+      linkedCheckId: linkedCheckIds[0] ?? null,
+      linkedCheckIds,
+      zIndex: marker.zIndex ?? 100 + index,
+    }
+  })
   const initiativeTokens = sortTokensByInitiative(normalizedTokens)
   const activeInitiativeTokenId =
     nextState.activeInitiativeTokenId &&

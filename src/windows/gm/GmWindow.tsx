@@ -1938,6 +1938,7 @@ export function GmWindow() {
   const [pendingCharacterDeleteId, setPendingCharacterDeleteId] = useState<string | null>(null)
   const [selectedZoneId, setSelectedZoneId] = useState<string | null>(null)
   const [selectedServiceMarkerId, setSelectedServiceMarkerId] = useState<string | null>(null)
+  const [serviceMarkerNotePreviewId, setServiceMarkerNotePreviewId] = useState<string | null>(null)
   const [selectedTokenId, setSelectedTokenId] = useState<string | null>(null)
   const [selectedLayerId, setSelectedLayerId] = useState<string | null>(null)
   const [collapsedMonsterIds, setCollapsedMonsterIds] = useState<string[]>([])
@@ -2421,6 +2422,10 @@ export function GmWindow() {
   const activeServiceMarker =
     activeSceneState?.serviceMarkers.find(
       (marker) => marker.id === selectedServiceMarkerId,
+    ) ?? null
+  const serviceMarkerNotePreview =
+    activeSceneState?.serviceMarkers.find(
+      (marker) => marker.id === serviceMarkerNotePreviewId,
     ) ?? null
   const activeZone =
     activeScene?.zones.find((zone) => zone.id === selectedZoneId) ??
@@ -3132,6 +3137,9 @@ export function GmWindow() {
       addTokenAt(event.clientX, event.clientY)
       return
     }
+    if (mapInteractionMode === 'navigate') {
+      return
+    }
     const resizeHandle = getZoneResizeHandle(event.currentTarget, event.clientX, event.clientY)
     if (resizeHandle) {
       beginZoneResize(zoneId, resizeHandle, event)
@@ -3268,6 +3276,17 @@ export function GmWindow() {
     setActiveEditorTab('checks')
     setIsSceneEditorModalOpen(true)
     setIsSceneEditorActionsOpen(false)
+  }
+  function getServiceMarkerLinkedCheckIds(marker: ServiceMarker) {
+    return Array.from(
+      new Set([
+        ...(marker.linkedCheckIds ?? []),
+        ...(marker.linkedCheckId ? [marker.linkedCheckId] : []),
+      ]),
+    ).filter((checkId) => activeScene?.checksClues.some((entry) => entry.id === checkId))
+  }
+  function focusServiceMarkerLinkedChecks(marker: ServiceMarker) {
+    focusLinkedCheck(getServiceMarkerLinkedCheckIds(marker)[0] ?? null)
   }
   function focusZoneLinkedCheck(zone: MapZone) {
     focusLinkedCheck(zone.linkedCheckId)
@@ -3724,6 +3743,7 @@ export function GmWindow() {
       note: '',
       linkedHandoutId: null,
       linkedCheckId: null,
+      linkedCheckIds: [],
       x,
       y,
       zIndex: 100,
@@ -5102,7 +5122,22 @@ export function GmWindow() {
     updateSceneRuntimeState(activeScene.id, (sceneState) => ({
       ...sceneState,
       serviceMarkers: sceneState.serviceMarkers.map((marker) =>
-        marker.linkedCheckId === entryId ? { ...marker, linkedCheckId: null } : marker,
+        marker.linkedCheckId === entryId || marker.linkedCheckIds?.includes(entryId)
+          ? (() => {
+            const linkedCheckIds = Array.from(
+              new Set([
+                ...(marker.linkedCheckIds ?? []),
+                ...(marker.linkedCheckId ? [marker.linkedCheckId] : []),
+              ]),
+            ).filter((checkId) => checkId !== entryId)
+
+            return {
+              ...marker,
+              linkedCheckId: linkedCheckIds[0] ?? null,
+              linkedCheckIds,
+            }
+          })()
+          : marker,
       ),
     }))
   }
@@ -6487,6 +6522,7 @@ export function GmWindow() {
             {activeScene.zones.map((zone) => {
               const isActiveZone = zone.id === activeZone?.id
               const canUseZoneControls = mapInteractionMode === 'navigate' || mapInteractionMode === 'zone'
+              const canEditZoneGeometry = mapInteractionMode === 'zone'
               const zoneLinkedHandout = zone.linkedHandoutId
                 ? sceneHandoutById.get(zone.linkedHandoutId) ?? null
                 : null
@@ -6563,7 +6599,7 @@ export function GmWindow() {
                     clearHoveredZoneResizeHandle(zone.id)
                   }}
                   onPointerMove={(event) => {
-                    if (!canUseZoneControls) {
+                    if (!canEditZoneGeometry) {
                       return
                     }
                     const handle = getZoneResizeHandle(event.currentTarget, event.clientX, event.clientY)
@@ -6576,7 +6612,7 @@ export function GmWindow() {
                     height: `${zone.height}%`,
                     cursor: canUseZoneControls
                       ? getZoneResizeCursor(
-                          hoveredZoneResizeHandle?.zoneId === zone.id ? hoveredZoneResizeHandle.handle : null,
+                          canEditZoneGeometry && hoveredZoneResizeHandle?.zoneId === zone.id ? hoveredZoneResizeHandle.handle : null,
                         )
                       : undefined,
                   }}
@@ -6784,9 +6820,7 @@ export function GmWindow() {
               const markerLinkedHandout = marker.linkedHandoutId
                 ? activeScene.handouts.find((handout) => handout.id === marker.linkedHandoutId) ?? null
                 : null
-              const markerLinkedCheck = marker.linkedCheckId
-                ? activeScene.checksClues.find((entry) => entry.id === marker.linkedCheckId) ?? null
-                : null
+              const markerLinkedChecks = getServiceMarkerLinkedCheckIds(marker)
               return (
                 <div
                   key={marker.id}
@@ -6805,7 +6839,6 @@ export function GmWindow() {
                     beginServiceMarkerDrag(marker, event)
                   }}
                   style={{ left: `${marker.x}%`, top: `${marker.y}%`, zIndex: marker.zIndex }}
-                  data-tooltip={isServiceMarkerDragging ? undefined : marker.note || marker.label}
                   aria-label={marker.note ? `${marker.label}: ${marker.note}` : marker.label}
                   role="button"
                   tabIndex={0}
@@ -6816,10 +6849,10 @@ export function GmWindow() {
                     onClick={(event) => event.stopPropagation()}
                   >
                     <button
-                      aria-label="Открыть раздатку"
-                      className={`service-marker-action-button ${markerLinkedHandout ? 'is-active' : 'is-disabled'}`}
-                      disabled={!markerLinkedHandout}
-                      onClick={() => focusLinkedHandout(marker.linkedHandoutId)}
+                      aria-label="Открыть заметку"
+                      className={`service-marker-action-button ${marker.note ? 'is-active' : 'is-disabled'}`}
+                      disabled={!marker.note}
+                      onClick={() => setServiceMarkerNotePreviewId(marker.id)}
                       onPointerDown={(event) => event.stopPropagation()}
                       type="button"
                     >
@@ -6837,9 +6870,9 @@ export function GmWindow() {
                     </button>
                     <button
                       aria-label="Открыть проверку"
-                      className={`service-marker-action-button ${markerLinkedCheck ? 'is-active' : 'is-disabled'}`}
-                      disabled={!markerLinkedCheck}
-                      onClick={() => focusLinkedCheck(marker.linkedCheckId)}
+                      className={`service-marker-action-button ${markerLinkedChecks.length > 0 ? 'is-active' : 'is-disabled'}`}
+                      disabled={markerLinkedChecks.length === 0}
+                      onClick={() => focusServiceMarkerLinkedChecks(marker)}
                       onPointerDown={(event) => event.stopPropagation()}
                       type="button"
                     >
@@ -6862,10 +6895,10 @@ export function GmWindow() {
               role="presentation"
             >
               <article
-                className={`handout-modal-card ${visiblePlayerHandout.imageSrc ? 'with-art' : 'text-only'}`}
+                className={`handout-modal-card ${visiblePlayerHandout.imageSrc ? 'with-art image-only' : 'text-only'}`}
+                style={visiblePlayerHandout.imageSrc ? { ['--handout-backdrop-image' as string]: `url(${visiblePlayerHandout.imageSrc})` } : undefined}
                 onClick={(event) => event.stopPropagation()}
               >
-                {visiblePlayerHandout.title ? <h2>{visiblePlayerHandout.title}</h2> : null}
                 {visiblePlayerHandout.imageSrc ? (
                   <figure className="handout-modal-figure">
                     <img
@@ -6874,8 +6907,36 @@ export function GmWindow() {
                       src={visiblePlayerHandout.imageSrc}
                     />
                   </figure>
-                ) : null}
-                {visiblePlayerHandout.body ? <p>{visiblePlayerHandout.body}</p> : null}
+                ) : (
+                  <p>{visiblePlayerHandout.body}</p>
+                )}
+              </article>
+            </div>
+          ) : null}
+          {serviceMarkerNotePreview ? (
+            <div
+              className="modal-backdrop service-marker-note-backdrop"
+              onClick={() => setServiceMarkerNotePreviewId(null)}
+              role="presentation"
+            >
+              <article
+                className="modal-dialog service-marker-note-modal"
+                onClick={(event) => event.stopPropagation()}
+                role="dialog"
+                aria-modal="true"
+                aria-label={serviceMarkerNotePreview.label}
+              >
+                <button
+                  aria-label="Закрыть"
+                  className="ghost-button compact-button token-modal-icon-button service-marker-note-close"
+                  onClick={() => setServiceMarkerNotePreviewId(null)}
+                  type="button"
+                >
+                  <i aria-hidden="true" className="fa-solid fa-xmark" />
+                </button>
+                <span className="eyebrow">Заметка</span>
+                <h2>{serviceMarkerNotePreview.label}</h2>
+                <p>{serviceMarkerNotePreview.note || 'Заметка не заполнена.'}</p>
               </article>
             </div>
           ) : null}

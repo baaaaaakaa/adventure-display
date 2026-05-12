@@ -42,3 +42,57 @@
   height: 34px;
   min-height: 34px;
 }
+
+.multiSelectList {
+  display: grid;
+  gap: 6px;
+  max-height: min(240px, 34vh);
+  overflow: auto;
+  padding: 6px;
+  border: 1px solid rgba(58, 43, 31, 0.12);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.52);
+}
+
+.multiSelectOption {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  gap: 8px;
+  padding: 8px;
+  border-radius: 10px;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.multiSelectOption:hover,
+.multiSelectOption:focus-within {
+  background: rgba(174, 123, 51, 0.1);
+}
+
+.multiSelectOption input {
+  width: auto;
+  margin-top: 2px;
+}
+
+.multiSelectOption span {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.multiSelectOption strong,
+.multiSelectOption small {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.multiSelectOption small {
+  color: var(--text-muted);
+}
+
+.emptyHint {
+  margin: 0;
+  padding: 8px;
+  color: var(--text-muted);
+}

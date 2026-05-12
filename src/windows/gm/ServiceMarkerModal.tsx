@@ -20,12 +20,27 @@ export function ServiceMarkerModal({
   onRemoveMarker,
   onUpdateMarker,
 }: ServiceMarkerModalProps) {
+  const linkedCheckIds = Array.from(
+    new Set([
+      ...(marker.linkedCheckIds ?? []),
+      ...(marker.linkedCheckId ? [marker.linkedCheckId] : []),
+    ]),
+  ).filter((checkId) => activeScene.checksClues.some((entry) => entry.id === checkId))
+
+  const toggleLinkedCheck = (checkId: string) => {
+    const nextIds = linkedCheckIds.includes(checkId)
+      ? linkedCheckIds.filter((currentId) => currentId !== checkId)
+      : [...linkedCheckIds, checkId]
+
+    onUpdateMarker(marker.id, (currentMarker) => ({
+      ...currentMarker,
+      linkedCheckId: nextIds[0] ?? null,
+      linkedCheckIds: nextIds,
+    }))
+  }
+
   return (
-    <div
-      className="modal-backdrop"
-      onClick={onClose}
-      role="presentation"
-    >
+    <div className="modal-backdrop" onClick={onClose} role="presentation">
       <div
         className="modal-dialog"
         onClick={(event) => event.stopPropagation()}
@@ -110,23 +125,30 @@ export function ServiceMarkerModal({
           </label>
 
           <label className="field">
-            <span>Связанная проверка или улика</span>
-            <StyledSelect
-              onChange={(event) =>
-                onUpdateMarker(marker.id, (currentMarker) => ({
-                  ...currentMarker,
-                  linkedCheckId: event.target.value || null,
-                }))
-              }
-              value={marker.linkedCheckId ?? ''}
-            >
-              <option value="">не привязана</option>
-              {activeScene.checksClues.map((entry) => (
-                <option key={entry.id} value={entry.id}>
-                  {entry.ability || 'Без названия'} • {entry.difficulty || 'без сложности'}
-                </option>
-              ))}
-            </StyledSelect>
+            <span>Связанные проверки и улики</span>
+            <div className={styles.multiSelectList}>
+              {activeScene.checksClues.length > 0 ? (
+                activeScene.checksClues.map((entry) => {
+                  const isSelected = linkedCheckIds.includes(entry.id)
+
+                  return (
+                    <label className={styles.multiSelectOption} key={entry.id}>
+                      <input
+                        checked={isSelected}
+                        onChange={() => toggleLinkedCheck(entry.id)}
+                        type="checkbox"
+                      />
+                      <span>
+                        <strong>{entry.ability || 'Без характеристики'}</strong>
+                        <small>{entry.difficulty || 'без сложности'}</small>
+                      </span>
+                    </label>
+                  )
+                })
+              ) : (
+                <p className={styles.emptyHint}>Проверки и улики пока не добавлены.</p>
+              )}
+            </div>
           </label>
 
           <label className={`field ${styles.orderField}`}>

@@ -336,6 +336,7 @@ export interface ServiceMarker {
   note: string
   linkedHandoutId?: string | null
   linkedCheckId?: string | null
+  linkedCheckIds?: string[]
   x: number
   y: number
   zIndex: number

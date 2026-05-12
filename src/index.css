@@ -3623,6 +3623,44 @@ textarea:focus {
 .service-marker.is-pressing[data-tooltip]::after {
   display: none;
 }
+
+.service-marker-note-backdrop {
+  background: rgba(20, 14, 10, 0.46);
+  backdrop-filter: blur(5px);
+}
+
+.service-marker-note-modal {
+  position: relative;
+  width: min(560px, calc(100vw - 36px));
+  display: grid;
+  gap: 12px;
+  padding: clamp(24px, 4vw, 42px);
+  background: rgba(248, 240, 226, 0.9);
+}
+
+.service-marker-note-modal h2,
+.service-marker-note-modal p {
+  margin: 0;
+}
+
+.service-marker-note-modal h2 {
+  font-family: var(--display);
+  font-size: clamp(2rem, 4vw, 3.6rem);
+  line-height: 1;
+}
+
+.service-marker-note-modal p {
+  color: var(--text-muted);
+  font-size: 1.02rem;
+  line-height: 1.55;
+  white-space: pre-wrap;
+}
+
+.service-marker-note-close {
+  position: absolute;
+  top: 18px;
+  right: 18px;
+}
 .fog-layer {
   z-index: 5;
   pointer-events: none;
@@ -3958,6 +3996,33 @@ textarea:focus {
   pointer-events: auto;
 }
 
+.handout-image-stage,
+.handout-modal-card.image-only {
+  position: relative;
+  overflow: hidden;
+  background-image:
+    linear-gradient(rgba(18, 12, 8, 0.42), rgba(18, 12, 8, 0.42)),
+    var(--handout-backdrop-image);
+  background-position: center;
+  background-size: cover;
+}
+
+.handout-image-stage .player-frame {
+  position: relative;
+  z-index: 1;
+}
+
+.handout-image-stage::before,
+.handout-modal-card.image-only::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: inherit;
+  filter: blur(18px);
+  transform: scale(1.06);
+  opacity: 0.78;
+}
+
 .gm-handout-modal {
   z-index: 12;
 }
@@ -3981,18 +4046,35 @@ textarea:focus {
   grid-template-columns: 1fr;
 }
 
+.handout-modal-card.image-only {
+  width: min(92vw, 1180px);
+  max-height: min(86vh, 860px);
+  overflow: hidden;
+  padding: clamp(12px, 2vw, 24px);
+  border: 0;
+  background-color: rgba(18, 12, 8, 0.72);
+}
+
 .handout-modal-figure {
+  position: relative;
+  z-index: 1;
   margin: 0;
   min-width: 0;
 }
 
 .handout-modal-image {
   width: 100%;
-  max-height: 58vh;
+  max-height: 78vh;
   object-fit: contain;
   border-radius: 20px;
   background: rgba(255, 255, 255, 0.08);
   box-shadow: 0 18px 42px rgba(0, 0, 0, 0.24);
+}
+
+.handout-modal-card.image-only .handout-modal-image {
+  max-height: min(82vh, 820px);
+  border-radius: 16px;
+  background: transparent;
 }
 
 .handout-modal-card h2 {
@@ -4012,16 +4094,37 @@ textarea:focus {
 }
 
 .handout-figure {
+  position: relative;
+  z-index: 1;
   margin: 0;
 }
 
 .handout-image {
   width: 100%;
-  max-height: 60vh;
+  max-height: 78vh;
   object-fit: contain;
   border-radius: 24px;
   background: rgba(255, 255, 255, 0.08);
   box-shadow: 0 18px 40px rgba(0, 0, 0, 0.22);
+}
+
+.handout-image-stage .player-overlay,
+.handout-image-stage .handout-copy {
+  display: none;
+}
+
+.handout-image-stage .handout-frame,
+.handout-image-stage .handout-frame.with-art {
+  max-width: min(92vw, 1280px);
+}
+
+.handout-image-stage .handout-frame.with-art .handout-shell {
+  grid-template-columns: 1fr;
+}
+
+.handout-image-stage .handout-image {
+  max-height: 84vh;
+  border-radius: 18px;
 }
 
 .handout-copy {

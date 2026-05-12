@@ -155,7 +155,10 @@ export function PlayerWindow() {
         className={`player-stage player-stage-enter accent-${scene.accent}`}
         key={presentationKey}
       >
-        <section className="player-hero">
+        <section
+          className={`player-hero ${handout.imageSrc ? 'handout-image-stage' : ''}`}
+          style={handout.imageSrc ? { ['--handout-backdrop-image' as string]: `url(${handout.imageSrc})` } : undefined}
+        >
           <div className="player-overlay"></div>
           <div
             className={`player-frame handout-frame ${handout.imageSrc ? 'with-art' : 'text-only'}`}
@@ -169,14 +172,11 @@ export function PlayerWindow() {
                     src={handout.imageSrc}
                   />
                 </figure>
-              ) : null}
-              <article className="handout-copy">
-                <div className="handout-chips">
-                  <span className="player-chip">{scene.title}</span>
-                </div>
-                <h1>{handout.title}</h1>
-                <p>{handout.body}</p>
-              </article>
+              ) : (
+                <article className="handout-copy">
+                  <p>{handout.body}</p>
+                </article>
+              )}
             </div>
           </div>
         </section>
@@ -417,14 +417,17 @@ export function PlayerWindow() {
 
           {handout ? (
             <div className="handout-modal-backdrop player-handout-modal" role="presentation">
-              <article className={`handout-modal-card ${handout.imageSrc ? 'with-art' : 'text-only'}`}>
-                {handout.title ? <h2>{handout.title}</h2> : null}
+              <article
+                className={`handout-modal-card ${handout.imageSrc ? 'with-art image-only' : 'text-only'}`}
+                style={handout.imageSrc ? { ['--handout-backdrop-image' as string]: `url(${handout.imageSrc})` } : undefined}
+              >
                 {handout.imageSrc ? (
                   <figure className="handout-modal-figure">
                     <img alt={handout.title} className="handout-modal-image" src={handout.imageSrc} />
                   </figure>
-                ) : null}
-                {handout.body ? <p>{handout.body}</p> : null}
+                ) : (
+                  <p>{handout.body}</p>
+                )}
               </article>
             </div>
           ) : null}
