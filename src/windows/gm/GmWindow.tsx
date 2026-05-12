@@ -133,6 +133,7 @@ type FogSelectionRect = {
 }
 type ZoneSelectionRect = FogSelectionRect
 type ZoneResizeHandle = 'n' | 'e' | 's' | 'w' | 'ne' | 'nw' | 'se' | 'sw'
+type ZoneGeometry = Pick<MapZone, 'x' | 'y' | 'width' | 'height'>
 function getZoneResizeHandle(zoneElement: HTMLDivElement, clientX: number, clientY: number): ZoneResizeHandle | null {
   const rect = zoneElement.getBoundingClientRect()
   const edgeThreshold = Math.max(8, Math.min(14, Math.min(rect.width, rect.height) * 0.18))
@@ -1972,7 +1973,12 @@ export function GmWindow() {
     handle: ZoneResizeHandle
     startX: number
     startY: number
-    zone: Pick<MapZone, 'x' | 'y' | 'width' | 'height'>
+    zone: ZoneGeometry
+  } | null>(null)
+  const zoneInteractionDraftRef = useRef<{
+    zoneElement: HTMLDivElement
+    zoneId: string
+    geometry: ZoneGeometry
   } | null>(null)
   const hoveredZoneResizeHandleRef = useRef<{
     zoneId: string
@@ -2871,6 +2877,35 @@ export function GmWindow() {
       }
     }
   }
+  function applyZoneDraftStyle(zoneElement: HTMLDivElement, geometry: ZoneGeometry) {
+    zoneElement.style.left = `${geometry.x}%`
+    zoneElement.style.top = `${geometry.y}%`
+    zoneElement.style.width = `${geometry.width}%`
+    zoneElement.style.height = `${geometry.height}%`
+  }
+  function setZoneInteractionDraft(
+    zoneElement: HTMLDivElement,
+    zoneId: string,
+    geometry: ZoneGeometry,
+  ) {
+    zoneInteractionDraftRef.current = {
+      zoneElement,
+      zoneId,
+      geometry,
+    }
+    applyZoneDraftStyle(zoneElement, geometry)
+  }
+  function commitZoneInteractionDraft(zoneId: string) {
+    const draft = zoneInteractionDraftRef.current
+    zoneInteractionDraftRef.current = null
+    if (!draft || draft.zoneId !== zoneId) {
+      return
+    }
+    updateZone(zoneId, (zone) => ({
+      ...zone,
+      ...draft.geometry,
+    }))
+  }
   function removeZone(zoneId: string) {
     if (!activeScene) {
       return
@@ -2903,15 +2938,15 @@ export function GmWindow() {
     }
     setSelectedZoneId((currentId) => (currentId === zoneId ? null : currentId))
   }
-  function moveZone(
-    zoneId: string,
+  function getMovedZoneGeometry(
+    zone: MapZone,
     clientX: number,
     clientY: number,
     dragOffset: { x: number; y: number } | null = null,
-  ) {
+  ): ZoneGeometry | null {
     const mapBoard = mapFrameRef.current
     if (!mapBoard || !activeScene) {
-      return
+      return null
     }
     const { x, y } = resolveMapBoardPosition(
       mapBoard,
@@ -2919,11 +2954,12 @@ export function GmWindow() {
       clientY,
       activeMapViewport,
     )
-    updateZone(zoneId, (zone) => ({
-      ...zone,
+    return {
       x: clampZoneCoordinate(x - (dragOffset?.x ?? 0), zone.x),
       y: clampZoneCoordinate(y - (dragOffset?.y ?? 0), zone.y),
-    }))
+      width: zone.width,
+      height: zone.height,
+    }
   }
   function beginZoneDrag(
     zoneId: string,
@@ -2934,6 +2970,7 @@ export function GmWindow() {
     }
     event.preventDefault()
     event.stopPropagation()
+    const zoneElement = event.currentTarget
     zoneDragStartRef.current = {
       x: event.clientX,
       y: event.clientY,
@@ -2957,6 +2994,7 @@ export function GmWindow() {
     suppressZoneClickRef.current = false
     setSelectedZoneId(zoneId)
     const handleMove = (moveEvent: PointerEvent) => {
+      moveEvent.preventDefault()
       if (zoneDragStartRef.current) {
         const deltaX = moveEvent.clientX - zoneDragStartRef.current.x
         const deltaY = moveEvent.clientY - zoneDragStartRef.current.y
@@ -2964,11 +3002,20 @@ export function GmWindow() {
           suppressZoneClickRef.current = true
         }
       }
-      if (suppressZoneClickRef.current) {
-        moveZone(zoneId, moveEvent.clientX, moveEvent.clientY, zoneDragOffsetRef.current)
+      if (suppressZoneClickRef.current && zone) {
+        const nextGeometry = getMovedZoneGeometry(
+          zone,
+          moveEvent.clientX,
+          moveEvent.clientY,
+          zoneDragOffsetRef.current,
+        )
+        if (nextGeometry) {
+          setZoneInteractionDraft(zoneElement, zoneId, nextGeometry)
+        }
       }
     }
     const handleUp = () => {
+      commitZoneInteractionDraft(zoneId)
       zoneDragStartRef.current = null
       zoneDragOffsetRef.current = null
       window.removeEventListener('pointermove', handleMove)
@@ -2992,6 +3039,7 @@ export function GmWindow() {
     }
     event.preventDefault()
     event.stopPropagation()
+    const zoneElement = event.currentTarget
     const startPointer = resolveMapBoardPosition(
       mapBoard,
       event.clientX,
@@ -3013,6 +3061,7 @@ export function GmWindow() {
     }
     setSelectedZoneId(zoneId)
     const handleMove = (moveEvent: PointerEvent) => {
+      moveEvent.preventDefault()
       const resizeState = zoneResizeStateRef.current
       if (!resizeState || resizeState.zoneId !== zoneId) {
         return
@@ -3042,15 +3091,15 @@ export function GmWindow() {
       if (resizeState.handle.includes('s')) {
         bottom = Math.max(top + minimumSize, Math.min(100, resizeState.zone.y + resizeState.zone.height + deltaY))
       }
-      updateZone(zoneId, (currentZone) => ({
-        ...currentZone,
+      setZoneInteractionDraft(zoneElement, zoneId, {
         x: left,
         y: top,
-        width: clampZoneSize(right - left, currentZone.width),
-        height: clampZoneSize(bottom - top, currentZone.height),
-      }))
+        width: clampZoneSize(right - left, resizeState.zone.width),
+        height: clampZoneSize(bottom - top, resizeState.zone.height),
+      })
     }
     const handleUp = () => {
+      commitZoneInteractionDraft(zoneId)
       zoneResizeStateRef.current = null
       window.removeEventListener('pointermove', handleMove)
       window.removeEventListener('pointerup', handleUp)
