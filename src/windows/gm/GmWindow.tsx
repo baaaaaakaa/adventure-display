@@ -3,6 +3,7 @@ import {
   Suspense,
   startTransition,
   useEffect,
+  useMemo,
   useRef,
   useState,
   type KeyboardEvent as ReactKeyboardEvent,
@@ -1960,6 +1961,7 @@ export function GmWindow() {
     zoneId: string
     handle: ZoneResizeHandle | null
   } | null>(null)
+  const [hoveredZoneId, setHoveredZoneId] = useState<string | null>(null)
   const [rotatingTokenId, setRotatingTokenId] = useState<string | null>(null)
   const sceneEditorActionsRef = useRef<HTMLDivElement | null>(null)
   const layerImageInputRef = useRef<HTMLInputElement | null>(null)
@@ -1971,6 +1973,10 @@ export function GmWindow() {
     startX: number
     startY: number
     zone: Pick<MapZone, 'x' | 'y' | 'width' | 'height'>
+  } | null>(null)
+  const hoveredZoneResizeHandleRef = useRef<{
+    zoneId: string
+    handle: ZoneResizeHandle | null
   } | null>(null)
   const suppressZoneClickRef = useRef(false)
   const tokenDragStartRef = useRef<{ x: number; y: number } | null>(null)
@@ -2284,8 +2290,26 @@ export function GmWindow() {
     adventure && activeSceneIndex >= 0 && activeSceneIndex < adventure.scenes.length - 1
       ? (adventure.scenes[activeSceneIndex + 1]?.id ?? null)
       : null
-  const activeSceneMonsterIds = new Set(activeScene?.monsterIds ?? [])
-  const sceneMonsters = adventureMonsters.filter((monster) => activeSceneMonsterIds.has(monster.id))
+  const activeSceneMonsterIds = useMemo(
+    () => new Set(activeScene?.monsterIds ?? []),
+    [activeScene?.monsterIds],
+  )
+  const sceneMonsters = useMemo(
+    () => adventureMonsters.filter((monster) => activeSceneMonsterIds.has(monster.id)),
+    [activeSceneMonsterIds, adventureMonsters],
+  )
+  const sceneHandoutById = useMemo(
+    () => new Map((activeScene?.handouts ?? []).map((handout) => [handout.id, handout])),
+    [activeScene?.handouts],
+  )
+  const sceneCheckById = useMemo(
+    () => new Map((activeScene?.checksClues ?? []).map((entry) => [entry.id, entry])),
+    [activeScene?.checksClues],
+  )
+  const sceneMonsterById = useMemo(
+    () => new Map(sceneMonsters.map((monster) => [monster.id, monster])),
+    [sceneMonsters],
+  )
   const linkedCheckPreviewEntry =
     activeScene?.checksClues.find((entry) => entry.id === linkedCheckPreviewId) ?? null
   const resolvedSelectedHandoutId = activeScene?.handouts.some(
@@ -2401,6 +2425,11 @@ export function GmWindow() {
       setIsZoneModalOpen(false)
     }
   }, [activeScene?.zones.length])
+  useEffect(() => {
+    setHoveredZoneId(null)
+    hoveredZoneResizeHandleRef.current = null
+    setHoveredZoneResizeHandle(null)
+  }, [activeScene?.id, mapInteractionMode])
   const orderedTokens = [...activeMapTokens].sort(
     (left, right) => left.zIndex - right.zIndex,
   )
@@ -2439,9 +2468,13 @@ export function GmWindow() {
     aspectRatio: `${activeMapGrid.columns} / ${activeMapGrid.rows}`,
   }
   const isMapGridVisible = activeSceneState?.mapGridVisible ?? true
+  const hiddenZoneIdSet = useMemo(
+    () => new Set(activeSceneState?.hiddenZoneIds ?? []),
+    [activeSceneState?.hiddenZoneIds],
+  )
   const hiddenFogZones =
     activeScene && activeSceneState
-      ? activeScene.zones.filter((zone) => activeSceneState.hiddenZoneIds.includes(zone.id))
+      ? activeScene.zones.filter((zone) => hiddenZoneIdSet.has(zone.id))
       : []
   const effectiveFogCells =
     activeSceneState ? activeSceneState.fogCells : []
@@ -3024,6 +3057,22 @@ export function GmWindow() {
     }
     window.addEventListener('pointermove', handleMove)
     window.addEventListener('pointerup', handleUp)
+  }
+  function updateHoveredZoneResizeHandle(zoneId: string, handle: ZoneResizeHandle | null) {
+    const current = hoveredZoneResizeHandleRef.current
+    if (current?.zoneId === zoneId && current.handle === handle) {
+      return
+    }
+    const nextHandle = { zoneId, handle }
+    hoveredZoneResizeHandleRef.current = nextHandle
+    setHoveredZoneResizeHandle(nextHandle)
+  }
+  function clearHoveredZoneResizeHandle(zoneId: string) {
+    if (hoveredZoneResizeHandleRef.current?.zoneId !== zoneId) {
+      return
+    }
+    hoveredZoneResizeHandleRef.current = null
+    setHoveredZoneResizeHandle(null)
   }
   function handleZonePointerDown(zoneId: string, event: ReactPointerEvent<HTMLDivElement>) {
     if (mapInteractionMode === 'marker') {
@@ -3965,9 +4014,6 @@ export function GmWindow() {
     return normalizeRotationDegrees(
       (Math.atan2(clientY - centerY, clientX - centerX) * 180) / Math.PI + 90,
     )
-  }
-  function isZoneHiddenByFog(zoneId: string, hiddenZoneIds: string[]) {
-    return hiddenZoneIds.includes(zoneId)
   }
   function clearAllFog() {
     updateSceneRuntimeState(
@@ -6302,16 +6348,17 @@ export function GmWindow() {
             ) : null}
             {activeScene.zones.map((zone) => {
               const isActiveZone = zone.id === activeZone?.id
+              const canUseZoneControls = mapInteractionMode === 'navigate' || mapInteractionMode === 'zone'
               const zoneLinkedHandout = zone.linkedHandoutId
-                ? activeScene.handouts.find((handout) => handout.id === zone.linkedHandoutId) ?? null
+                ? sceneHandoutById.get(zone.linkedHandoutId) ?? null
                 : null
               const zoneLinkedCheck = zone.linkedCheckId
-                ? activeScene.checksClues.find((entry) => entry.id === zone.linkedCheckId) ?? null
+                ? sceneCheckById.get(zone.linkedCheckId) ?? null
                 : null
               const zoneLinkedMonster = zone.linkedMonsterId
-                ? sceneMonsters.find((monster) => monster.id === zone.linkedMonsterId) ?? null
+                ? sceneMonsterById.get(zone.linkedMonsterId) ?? null
                 : null
-              const zoneHasFog = isZoneHiddenByFog(zone.id, activeSceneState.hiddenZoneIds)
+              const zoneHasFog = hiddenZoneIdSet.has(zone.id)
               const zoneActionItems = [
                 {
                   id: 'handout-open',
@@ -6342,9 +6389,15 @@ export function GmWindow() {
                   disabled: !zoneLinkedMonster,
                   onClick: () => focusZoneLinkedMonster(zone),
                 },
-              ]
-              const useCompactZoneTools =
+              ].filter((action) => !action.disabled)
+              const shouldRenderZoneTools =
+                canUseZoneControls &&
                 zoneActionItems.length > 0 &&
+                (isActiveZone ||
+                  hoveredZoneId === zone.id ||
+                  openCompactZoneToolsZoneId === zone.id)
+              const useCompactZoneTools =
+                shouldRenderZoneTools &&
                 (zone.width < Math.max(18, zoneActionItems.length * 5.4) || zone.height < 11)
               return (
                 <div
@@ -6362,25 +6415,32 @@ export function GmWindow() {
                     setActiveEditorTab('scene')
                   }}
                   onPointerDown={(event) => handleZonePointerDown(zone.id, event)}
-                  onPointerLeave={() =>
-                    setHoveredZoneResizeHandle((current) => (current?.zoneId === zone.id ? null : current))
-                  }
+                  onPointerEnter={() => {
+                    if (canUseZoneControls) {
+                      setHoveredZoneId(zone.id)
+                    }
+                  }}
+                  onPointerLeave={() => {
+                    setHoveredZoneId((current) => (current === zone.id ? null : current))
+                    clearHoveredZoneResizeHandle(zone.id)
+                  }}
                   onPointerMove={(event) => {
+                    if (!canUseZoneControls) {
+                      return
+                    }
                     const handle = getZoneResizeHandle(event.currentTarget, event.clientX, event.clientY)
-                    setHoveredZoneResizeHandle((current) =>
-                      current?.zoneId === zone.id && current.handle === handle
-                        ? current
-                        : { zoneId: zone.id, handle },
-                    )
+                    updateHoveredZoneResizeHandle(zone.id, handle)
                   }}
                   style={{
                     left: `${zone.x}%`,
                     top: `${zone.y}%`,
                     width: `${zone.width}%`,
                     height: `${zone.height}%`,
-                    cursor: getZoneResizeCursor(
-                      hoveredZoneResizeHandle?.zoneId === zone.id ? hoveredZoneResizeHandle.handle : null,
-                    ),
+                    cursor: canUseZoneControls
+                      ? getZoneResizeCursor(
+                          hoveredZoneResizeHandle?.zoneId === zone.id ? hoveredZoneResizeHandle.handle : null,
+                        )
+                      : undefined,
                   }}
                   title={zone.note || zone.title}
                   role="button"
@@ -6408,7 +6468,7 @@ export function GmWindow() {
                       className={`fa-solid ${zoneHasFog ? 'fa-eye-slash' : 'fa-eye'}`}
                     />
                   </span>
-                  {zoneActionItems.length > 0 ? (
+                  {shouldRenderZoneTools ? (
                     useCompactZoneTools ? (
                       <div
                         className={`map-zone-tools map-zone-tools-compact ${openCompactZoneToolsZoneId === zone.id ? 'is-open' : ''
