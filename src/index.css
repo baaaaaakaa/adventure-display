@@ -3591,10 +3591,6 @@ textarea:focus {
   display: none;
 }
 
-.service-marker[data-tooltip] {
-  position: relative;
-}
-
 .service-marker[data-tooltip]::after {
   content: attr(data-tooltip);
   position: absolute;
