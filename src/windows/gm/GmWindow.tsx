@@ -134,6 +134,7 @@ type FogSelectionRect = {
 type ZoneSelectionRect = FogSelectionRect
 type ZoneResizeHandle = 'n' | 'e' | 's' | 'w' | 'ne' | 'nw' | 'se' | 'sw'
 type ZoneGeometry = Pick<MapZone, 'x' | 'y' | 'width' | 'height'>
+type MapPoint = { x: number; y: number }
 function getZoneResizeHandle(zoneElement: HTMLDivElement, clientX: number, clientY: number): ZoneResizeHandle | null {
   const rect = zoneElement.getBoundingClientRect()
   const edgeThreshold = Math.max(8, Math.min(14, Math.min(rect.width, rect.height) * 0.18))
@@ -1996,6 +1997,11 @@ export function GmWindow() {
   const tokenRotationGestureRef = useRef<{ tokenId: string; angleOffset: number } | null>(null)
   const suppressTokenClickRef = useRef(false)
   const serviceMarkerDragStartRef = useRef<{ x: number; y: number } | null>(null)
+  const serviceMarkerInteractionDraftRef = useRef<{
+    markerElement: HTMLElement
+    markerId: string
+    position: MapPoint
+  } | null>(null)
   const suppressServiceMarkerClickRef = useRef(false)
   const [newServiceMarkerLabel] = useState('Служебная метка')
   const [newMonsterSpawnCount, setNewMonsterSpawnCount] = useState(1)
@@ -3756,25 +3762,55 @@ export function GmWindow() {
       ),
     }))
   }
-  function moveServiceMarker(markerId: string, clientX: number, clientY: number) {
+  function getDraggedServiceMarkerPosition(
+    marker: ServiceMarker,
+    startClientX: number,
+    startClientY: number,
+    clientX: number,
+    clientY: number,
+  ): MapPoint | null {
     const mapBoard = mapFrameRef.current
     if (!mapBoard || !activeScene) {
+      return null
+    }
+    const rect = mapBoard.getBoundingClientRect()
+    const scale = activeMapViewport.scale || 1
+    const deltaX = ((clientX - startClientX) / (rect.width * scale)) * 100
+    const deltaY = ((clientY - startClientY) / (rect.height * scale)) * 100
+    return {
+      x: clampZoneCoordinate(marker.x + deltaX, marker.x),
+      y: clampZoneCoordinate(marker.y + deltaY, marker.y),
+    }
+  }
+  function applyServiceMarkerDraftStyle(markerElement: HTMLElement, position: MapPoint) {
+    markerElement.style.left = `${position.x}%`
+    markerElement.style.top = `${position.y}%`
+  }
+  function setServiceMarkerInteractionDraft(
+    markerElement: HTMLElement,
+    markerId: string,
+    position: MapPoint,
+  ) {
+    serviceMarkerInteractionDraftRef.current = {
+      markerElement,
+      markerId,
+      position,
+    }
+    applyServiceMarkerDraftStyle(markerElement, position)
+  }
+  function commitServiceMarkerInteractionDraft(markerId: string) {
+    const draft = serviceMarkerInteractionDraftRef.current
+    serviceMarkerInteractionDraftRef.current = null
+    if (!draft || draft.markerId !== markerId) {
       return
     }
-    const { x, y } = resolveMapBoardPosition(
-      mapBoard,
-      clientX,
-      clientY,
-      activeMapViewport,
-    )
     updateServiceMarker(markerId, (marker) => ({
       ...marker,
-      x,
-      y,
+      ...draft.position,
     }))
   }
   function beginServiceMarkerDrag(
-    markerId: string,
+    marker: ServiceMarker,
     event: ReactPointerEvent<HTMLElement>,
   ) {
     if (mapInteractionMode !== 'navigate' && mapInteractionMode !== 'marker') {
@@ -3782,12 +3818,19 @@ export function GmWindow() {
     }
     event.preventDefault()
     event.stopPropagation()
+    const markerElement = event.currentTarget
+    try {
+      markerElement.setPointerCapture?.(event.pointerId)
+    } catch {
+      // Synthetic pointer events used in tests may not have an active capture target.
+    }
+    const markerId = marker.id
     setSelectedServiceMarkerId(markerId)
     setIsServiceMarkerDragging(true)
     serviceMarkerDragStartRef.current = { x: event.clientX, y: event.clientY }
     suppressServiceMarkerClickRef.current = false
-    moveServiceMarker(markerId, event.clientX, event.clientY)
     const handleMove = (moveEvent: PointerEvent) => {
+      moveEvent.preventDefault()
       if (serviceMarkerDragStartRef.current) {
         const deltaX = moveEvent.clientX - serviceMarkerDragStartRef.current.x
         const deltaY = moveEvent.clientY - serviceMarkerDragStartRef.current.y
@@ -3795,7 +3838,18 @@ export function GmWindow() {
           suppressServiceMarkerClickRef.current = true
         }
       }
-      moveServiceMarker(markerId, moveEvent.clientX, moveEvent.clientY)
+      if (suppressServiceMarkerClickRef.current) {
+        const nextPosition = getDraggedServiceMarkerPosition(
+          marker,
+          serviceMarkerDragStartRef.current?.x ?? event.clientX,
+          serviceMarkerDragStartRef.current?.y ?? event.clientY,
+          moveEvent.clientX,
+          moveEvent.clientY,
+        )
+        if (nextPosition) {
+          setServiceMarkerInteractionDraft(markerElement, markerId, nextPosition)
+        }
+      }
     }
     const handleUp = (upEvent: PointerEvent) => {
       if (serviceMarkerDragStartRef.current) {
@@ -3807,6 +3861,7 @@ export function GmWindow() {
       }
       window.removeEventListener('pointermove', handleMove)
       window.removeEventListener('pointerup', handleUp)
+      commitServiceMarkerInteractionDraft(markerId)
       setIsServiceMarkerDragging(false)
       serviceMarkerDragStartRef.current = null
     }
@@ -6701,7 +6756,7 @@ export function GmWindow() {
                   }}
                   onPointerDown={(event) => {
                     event.stopPropagation()
-                    beginServiceMarkerDrag(marker.id, event)
+                    beginServiceMarkerDrag(marker, event)
                   }}
                   style={{ left: `${marker.x}%`, top: `${marker.y}%`, zIndex: marker.zIndex }}
                   data-tooltip={isServiceMarkerDragging ? undefined : marker.note || marker.label}
