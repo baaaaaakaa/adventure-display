@@ -6922,6 +6922,7 @@ export function GmWindow() {
               <article
                 className="modal-dialog service-marker-note-modal"
                 onClick={(event) => event.stopPropagation()}
+                onWheel={(event) => event.stopPropagation()}
                 role="dialog"
                 aria-modal="true"
                 aria-label={serviceMarkerNotePreview.label}

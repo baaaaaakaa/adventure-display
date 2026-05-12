@@ -103,6 +103,10 @@ export function useMapViewportControls({
     }
 
     const handleWheel = (event: WheelEvent) => {
+      if (event.target instanceof HTMLElement && event.target.closest('.modal-backdrop, .modal-dialog')) {
+        return
+      }
+
       event.preventDefault()
       zoomMapAtPoint(event.clientX, event.clientY, event.deltaY < 0 ? mapScaleStep : -mapScaleStep)
     }
