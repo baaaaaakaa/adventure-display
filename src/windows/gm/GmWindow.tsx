@@ -3762,7 +3762,10 @@ export function GmWindow() {
       ),
     }))
   }
-  function getServiceMarkerPositionAtPointer(
+  function getDraggedServiceMarkerPosition(
+    marker: ServiceMarker,
+    startClientX: number,
+    startClientY: number,
     clientX: number,
     clientY: number,
   ): MapPoint | null {
@@ -3770,15 +3773,13 @@ export function GmWindow() {
     if (!mapBoard || !activeScene) {
       return null
     }
-    const { x, y } = resolveMapBoardPosition(
-      mapBoard,
-      clientX,
-      clientY,
-      activeMapViewport,
-    )
+    const rect = mapBoard.getBoundingClientRect()
+    const scale = activeMapViewport.scale || 1
+    const deltaX = ((clientX - startClientX) / (rect.width * scale)) * 100
+    const deltaY = ((clientY - startClientY) / (rect.height * scale)) * 100
     return {
-      x,
-      y,
+      x: clampZoneCoordinate(marker.x + deltaX, marker.x),
+      y: clampZoneCoordinate(marker.y + deltaY, marker.y),
     }
   }
   function applyServiceMarkerDraftStyle(markerElement: HTMLElement, position: MapPoint) {
@@ -3825,7 +3826,6 @@ export function GmWindow() {
     }
     const markerId = marker.id
     setSelectedServiceMarkerId(markerId)
-    setIsServiceMarkerDragging(true)
     serviceMarkerDragStartRef.current = { x: event.clientX, y: event.clientY }
     suppressServiceMarkerClickRef.current = false
     const handleMove = (moveEvent: PointerEvent) => {
@@ -3835,10 +3835,14 @@ export function GmWindow() {
         const deltaY = moveEvent.clientY - serviceMarkerDragStartRef.current.y
         if (Math.hypot(deltaX, deltaY) > tokenDragThreshold) {
           suppressServiceMarkerClickRef.current = true
+          setIsServiceMarkerDragging(true)
         }
       }
       if (suppressServiceMarkerClickRef.current) {
-        const nextPosition = getServiceMarkerPositionAtPointer(
+        const nextPosition = getDraggedServiceMarkerPosition(
+          marker,
+          serviceMarkerDragStartRef.current?.x ?? event.clientX,
+          serviceMarkerDragStartRef.current?.y ?? event.clientY,
           moveEvent.clientX,
           moveEvent.clientY,
         )
