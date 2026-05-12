@@ -2970,6 +2970,9 @@ textarea:focus {
   transform: translate(-50%, -50%);
   box-shadow: 0 10px 18px rgba(0, 0, 0, 0.28);
   cursor: grab;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-drag: none;
 }
 
 .service-marker:active {
@@ -3180,6 +3183,10 @@ textarea:focus {
 .service-marker:focus-within .service-marker-tools {
   opacity: 1;
   pointer-events: auto;
+}
+
+.service-marker.is-pressing .service-marker-tools {
+  display: none;
 }
 
 .service-marker-action-button {
@@ -3615,6 +3622,10 @@ textarea:focus {
 .service-marker[data-tooltip]:focus-visible::after {
   opacity: 1;
   transform: translate(-50%, 0);
+}
+
+.service-marker.is-pressing[data-tooltip]::after {
+  display: none;
 }
 .fog-layer {
   z-index: 5;

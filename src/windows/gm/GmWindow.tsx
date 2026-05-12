@@ -3819,13 +3819,13 @@ export function GmWindow() {
     event.preventDefault()
     event.stopPropagation()
     const markerElement = event.currentTarget
+    markerElement.classList.add('is-pressing')
     try {
       markerElement.setPointerCapture?.(event.pointerId)
     } catch {
       // Synthetic pointer events used in tests may not have an active capture target.
     }
     const markerId = marker.id
-    setSelectedServiceMarkerId(markerId)
     serviceMarkerDragStartRef.current = { x: event.clientX, y: event.clientY }
     suppressServiceMarkerClickRef.current = false
     const handleMove = (moveEvent: PointerEvent) => {
@@ -3835,6 +3835,7 @@ export function GmWindow() {
         const deltaY = moveEvent.clientY - serviceMarkerDragStartRef.current.y
         if (Math.hypot(deltaX, deltaY) > tokenDragThreshold) {
           suppressServiceMarkerClickRef.current = true
+          setSelectedServiceMarkerId(markerId)
           setIsServiceMarkerDragging(true)
         }
       }
@@ -3862,6 +3863,7 @@ export function GmWindow() {
       window.removeEventListener('pointermove', handleMove)
       window.removeEventListener('pointerup', handleUp)
       commitServiceMarkerInteractionDraft(markerId)
+      markerElement.classList.remove('is-pressing')
       setIsServiceMarkerDragging(false)
       serviceMarkerDragStartRef.current = null
     }
