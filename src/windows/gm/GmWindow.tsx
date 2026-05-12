@@ -415,6 +415,11 @@ function clampZoneSize(value: number, fallback: number) {
 function clampZoneCoordinate(value: number, fallback: number) {
   return Math.min(96, Math.max(4, Number.isFinite(value) ? value : fallback))
 }
+function clampZoneOrigin(value: number, fallback: number, size: number) {
+  const safeSize = Number.isFinite(size) ? Math.max(0, size) : 0
+  const maxCoordinate = Math.max(0, 100 - safeSize)
+  return Math.min(maxCoordinate, Math.max(0, Number.isFinite(value) ? value : fallback))
+}
 function clampSpawnCount(value: number, fallback = 1) {
   return Math.min(12, Math.max(1, Number.isFinite(value) ? Math.round(value) : fallback))
 }
@@ -1967,7 +1972,6 @@ export function GmWindow() {
   const sceneEditorActionsRef = useRef<HTMLDivElement | null>(null)
   const layerImageInputRef = useRef<HTMLInputElement | null>(null)
   const zoneDragStartRef = useRef<{ x: number; y: number } | null>(null)
-  const zoneDragOffsetRef = useRef<{ x: number; y: number } | null>(null)
   const zoneResizeStateRef = useRef<{
     zoneId: string
     handle: ZoneResizeHandle
@@ -2938,25 +2942,24 @@ export function GmWindow() {
     }
     setSelectedZoneId((currentId) => (currentId === zoneId ? null : currentId))
   }
-  function getMovedZoneGeometry(
+  function getDraggedZoneGeometry(
     zone: MapZone,
+    startClientX: number,
+    startClientY: number,
     clientX: number,
     clientY: number,
-    dragOffset: { x: number; y: number } | null = null,
   ): ZoneGeometry | null {
     const mapBoard = mapFrameRef.current
     if (!mapBoard || !activeScene) {
       return null
     }
-    const { x, y } = resolveMapBoardPosition(
-      mapBoard,
-      clientX,
-      clientY,
-      activeMapViewport,
-    )
+    const rect = mapBoard.getBoundingClientRect()
+    const scale = activeMapViewport.scale || 1
+    const deltaX = ((clientX - startClientX) / (rect.width * scale)) * 100
+    const deltaY = ((clientY - startClientY) / (rect.height * scale)) * 100
     return {
-      x: clampZoneCoordinate(x - (dragOffset?.x ?? 0), zone.x),
-      y: clampZoneCoordinate(y - (dragOffset?.y ?? 0), zone.y),
+      x: clampZoneOrigin(zone.x + deltaX, zone.x, zone.width),
+      y: clampZoneOrigin(zone.y + deltaY, zone.y, zone.height),
       width: zone.width,
       height: zone.height,
     }
@@ -2975,22 +2978,7 @@ export function GmWindow() {
       x: event.clientX,
       y: event.clientY,
     }
-    const mapBoard = mapFrameRef.current
     const zone = activeScene?.zones.find((entry) => entry.id === zoneId) ?? null
-    if (mapBoard && zone) {
-      const pointerPosition = resolveMapBoardPosition(
-        mapBoard,
-        event.clientX,
-        event.clientY,
-        activeMapViewport,
-      )
-      zoneDragOffsetRef.current = {
-        x: pointerPosition.x - zone.x,
-        y: pointerPosition.y - zone.y,
-      }
-    } else {
-      zoneDragOffsetRef.current = null
-    }
     suppressZoneClickRef.current = false
     setSelectedZoneId(zoneId)
     const handleMove = (moveEvent: PointerEvent) => {
@@ -3003,11 +2991,12 @@ export function GmWindow() {
         }
       }
       if (suppressZoneClickRef.current && zone) {
-        const nextGeometry = getMovedZoneGeometry(
+        const nextGeometry = getDraggedZoneGeometry(
           zone,
+          zoneDragStartRef.current?.x ?? event.clientX,
+          zoneDragStartRef.current?.y ?? event.clientY,
           moveEvent.clientX,
           moveEvent.clientY,
-          zoneDragOffsetRef.current,
         )
         if (nextGeometry) {
           setZoneInteractionDraft(zoneElement, zoneId, nextGeometry)
@@ -3017,7 +3006,6 @@ export function GmWindow() {
     const handleUp = () => {
       commitZoneInteractionDraft(zoneId)
       zoneDragStartRef.current = null
-      zoneDragOffsetRef.current = null
       window.removeEventListener('pointermove', handleMove)
       window.removeEventListener('pointerup', handleUp)
     }
