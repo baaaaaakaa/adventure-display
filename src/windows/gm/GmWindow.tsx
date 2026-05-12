@@ -3762,10 +3762,7 @@ export function GmWindow() {
       ),
     }))
   }
-  function getDraggedServiceMarkerPosition(
-    marker: ServiceMarker,
-    startClientX: number,
-    startClientY: number,
+  function getServiceMarkerPositionAtPointer(
     clientX: number,
     clientY: number,
   ): MapPoint | null {
@@ -3773,13 +3770,15 @@ export function GmWindow() {
     if (!mapBoard || !activeScene) {
       return null
     }
-    const rect = mapBoard.getBoundingClientRect()
-    const scale = activeMapViewport.scale || 1
-    const deltaX = ((clientX - startClientX) / (rect.width * scale)) * 100
-    const deltaY = ((clientY - startClientY) / (rect.height * scale)) * 100
+    const { x, y } = resolveMapBoardPosition(
+      mapBoard,
+      clientX,
+      clientY,
+      activeMapViewport,
+    )
     return {
-      x: clampZoneCoordinate(marker.x + deltaX, marker.x),
-      y: clampZoneCoordinate(marker.y + deltaY, marker.y),
+      x,
+      y,
     }
   }
   function applyServiceMarkerDraftStyle(markerElement: HTMLElement, position: MapPoint) {
@@ -3839,10 +3838,7 @@ export function GmWindow() {
         }
       }
       if (suppressServiceMarkerClickRef.current) {
-        const nextPosition = getDraggedServiceMarkerPosition(
-          marker,
-          serviceMarkerDragStartRef.current?.x ?? event.clientX,
-          serviceMarkerDragStartRef.current?.y ?? event.clientY,
+        const nextPosition = getServiceMarkerPositionAtPointer(
           moveEvent.clientX,
           moveEvent.clientY,
         )
