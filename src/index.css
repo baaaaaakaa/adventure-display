@@ -4058,12 +4058,18 @@ textarea:focus {
   border-radius: 0;
   background: transparent;
   box-shadow: none;
+  pointer-events: none;
 }
 
 .handout-modal-card.with-art.image-only {
   background: transparent;
   background-color: transparent;
   background-image: none;
+}
+
+.handout-modal-card.image-only .handout-modal-figure,
+.handout-modal-card.image-only .handout-modal-image {
+  pointer-events: auto;
 }
 
 .handout-modal-figure {
@@ -4086,6 +4092,7 @@ textarea:focus {
   max-height: min(82vh, 820px);
   border-radius: 16px;
   background: transparent;
+  box-shadow: none;
 }
 
 .handout-modal-card h2 {
